@@ -9,9 +9,11 @@ __pycache__/
 Untitled-*.json
 *.tmp
 *.log
+*.pid
 backups/
 
 web/node_modules/
 web/dist/
 web/.tools/
 web/f1-800x480.png
+pi-nashtrack.png
