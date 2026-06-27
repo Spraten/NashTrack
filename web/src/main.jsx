@@ -2937,6 +2937,12 @@ const NAV_VIEW = {
   "Dashboard": "dashboard", "F1": "f1", "Basketball": "basketball",
   "Football": "football", "Soccer": "soccer",
 };
+const NAV_ROUTE_KEYS = new Set([...Object.values(NAV_VIEW), "favorites", "calendar"]);
+
+function viewFromHash(hash = window.location.hash) {
+  const view = hash.replace(/^#/, "").toLowerCase();
+  return NAV_ROUTE_KEYS.has(view) ? view : "dashboard";
+}
 
 function Sidebar({ lastUpdated, nextRefresh, onOpenSettings, activeView, onNavigate }) {
   const ago = useTimeAgo(lastUpdated);
@@ -3353,7 +3359,7 @@ function App() {
   const [weather,      setWeather]      = useState(null);
   const [lastUpdated,  setLastUpdated]  = useState(null);
   const [nextRefresh,  setNextRefresh]  = useState(null);
-  const [activeView,   setActiveView]   = useState("dashboard");
+  const [activeView,   setActiveView]   = useState(() => viewFromHash());
   const [showSettings, setShowSettings] = useState(false);
   const [settings,     setSettings]     = useState(() => {
     try { return JSON.parse(localStorage.getItem("nash-settings") || "{}"); }
@@ -3361,6 +3367,16 @@ function App() {
   });
   const [googleToken,  setGoogleToken]  = useState(() => sessionStorage.getItem("gtoken") || null);
   const [calEvents,    setCalEvents]    = useState([]);
+
+  useEffect(() => {
+    function syncViewFromHash() {
+      if (window.location.hash.includes("access_token")) return;
+      setActiveView(viewFromHash());
+    }
+    window.addEventListener("hashchange", syncViewFromHash);
+    syncViewFromHash();
+    return () => window.removeEventListener("hashchange", syncViewFromHash);
+  }, []);
 
   // Pick up access_token from Google OAuth redirect (hash fragment)
   useEffect(() => {
@@ -3418,6 +3434,14 @@ function App() {
     localStorage.setItem("nash-settings", JSON.stringify(next));
   }
 
+  function navigateView(view) {
+    setActiveView(view);
+    const url = view === "dashboard"
+      ? window.location.pathname + window.location.search
+      : `${window.location.pathname}${window.location.search}#${view}`;
+    window.history.replaceState(null, "", url);
+  }
+
   useEffect(() => {
     fetchWeather().then(setWeather);
     const t = setInterval(() => fetchWeather().then(setWeather), 30 * 60_000);
@@ -3440,7 +3464,7 @@ function App() {
         nextRefresh={nextRefresh}
         onOpenSettings={() => setShowSettings(true)}
         activeView={activeView}
-        onNavigate={setActiveView}
+        onNavigate={navigateView}
       />
       <div className="content-shell">
         <Header weather={weather} />
