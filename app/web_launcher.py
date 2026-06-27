@@ -217,7 +217,19 @@ def _browser_candidates() -> list[Path]:
         return [Path(explicit_browser)]
 
     if os.name != "nt":
-        return []
+        candidates = [
+            Path(path)
+            for path in (
+                shutil.which("chromium-browser"),
+                shutil.which("chromium"),
+                shutil.which("google-chrome"),
+                "/usr/bin/chromium-browser",
+                "/usr/bin/chromium",
+                "/usr/bin/google-chrome",
+            )
+            if path
+        ]
+        return candidates
 
     candidates: list[Path] = []
     for env_name in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData"):
