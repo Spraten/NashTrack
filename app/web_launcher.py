@@ -248,14 +248,17 @@ def _browser_candidates() -> list[Path]:
 def _open_app_window(url: str = URL) -> None:
     for browser in _browser_candidates():
         if browser.exists():
+            args = [
+                str(browser),
+                f"--app={url}",
+                "--new-window",
+                f"--window-size={WINDOW_WIDTH},{WINDOW_HEIGHT}",
+                "--force-device-scale-factor=1",
+            ]
+            if os.name != "nt":
+                args.append("--start-fullscreen")
             subprocess.Popen(
-                [
-                    str(browser),
-                    f"--app={url}",
-                    "--new-window",
-                    f"--window-size={WINDOW_WIDTH},{WINDOW_HEIGHT}",
-                    "--force-device-scale-factor=1",
-                ],
+                args,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 creationflags=_creation_flags(),
