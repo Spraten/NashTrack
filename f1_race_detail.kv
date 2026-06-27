@@ -1,0 +1,229 @@
+#:kivy 2.3.0
+#:import dp kivy.metrics.dp
+
+
+<F1RaceDetailScreen>:
+    orientation: "vertical"
+    padding: dp(14)
+    spacing: dp(12)
+
+    canvas.before:
+        Color:
+            rgba: 0.005, 0.01, 0.02, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    BoxLayout:
+        size_hint_y: None
+        height: dp(90)
+        padding: dp(14)
+        spacing: dp(12)
+
+        canvas.before:
+            Color:
+                rgba: 0.03, 0.06, 0.10, 1
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [dp(14)]
+
+        BoxLayout:
+            orientation: "vertical"
+            spacing: dp(4)
+
+            Label:
+                text: root.race_title
+                font_size: "24sp"
+                bold: True
+                color: 1, 1, 1, 1
+                halign: "left"
+                valign: "middle"
+                shorten: True
+                shorten_from: "right"
+                text_size: self.size
+
+            Label:
+                text: root.race_subtitle
+                font_size: "13sp"
+                color: 0.55, 0.78, 1, 1
+                halign: "left"
+                valign: "middle"
+                shorten: True
+                shorten_from: "right"
+                text_size: self.size
+
+        Label:
+            text: root.ended_text
+            size_hint_x: None
+            width: dp(280)
+            color: 0.0, 1.0, 0.55, 1
+            bold: True
+            halign: "right"
+            valign: "middle"
+            text_size: self.size
+
+        Button:
+            text: "Close"
+            size_hint_x: None
+            width: dp(82)
+            background_normal: ""
+            background_color: 0.10, 0.20, 0.38, 1
+            color: 0.96, 0.98, 1, 1
+            on_release: root.close()
+
+    GridLayout:
+        cols: 3
+        size_hint_y: None
+        height: dp(160)
+        spacing: dp(10)
+
+        WinnerCard:
+            place: "P1"
+            driver: root.p1_driver
+            team: root.p1_team
+            headshot: root.p1_headshot
+            color: root.p1_color
+
+        WinnerCard:
+            place: "P2"
+            driver: root.p2_driver
+            team: root.p2_team
+            headshot: root.p2_headshot
+            color: root.p2_color
+
+        WinnerCard:
+            place: "P3"
+            driver: root.p3_driver
+            team: root.p3_team
+            headshot: root.p3_headshot
+            color: root.p3_color
+
+    BoxLayout:
+        spacing: dp(12)
+
+        PanelBox:
+            title: "FINAL CLASSIFICATION"
+            body: root.classification_text
+            size_hint_x: 0.55
+
+        PanelBox:
+            title: "WEATHER AT FINISH"
+            body: root.weather_text
+            size_hint_x: 0.25
+
+        PanelBox:
+            title: "RACE CONTROL"
+            body: root.race_control_text
+            size_hint_x: 0.20
+
+
+<WinnerCard@BoxLayout>:
+    place: ""
+    driver: ""
+    team: ""
+    headshot: ""
+    color: 1, 1, 1, 1
+
+    orientation: "horizontal"
+    padding: dp(12)
+    spacing: dp(10)
+
+    canvas.before:
+        Color:
+            rgba: 0.025, 0.05, 0.09, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(14)]
+        Color:
+            rgba: root.color
+        Line:
+            rounded_rectangle: self.x, self.y, self.width, self.height, dp(14)
+            width: 1.4
+
+    AsyncImage:
+        source: root.headshot
+        fit_mode: "contain"
+        size_hint_x: None
+        width: dp(82)
+        opacity: 1 if root.headshot else 0.25
+
+    BoxLayout:
+        orientation: "vertical"
+        spacing: dp(4)
+
+        Label:
+            text: root.place
+            color: root.color
+            bold: True
+            font_size: "21sp"
+            size_hint_y: None
+            height: dp(30)
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+        Label:
+            text: root.driver
+            color: 1, 1, 1, 1
+            bold: True
+            font_size: "18sp"
+            shorten: True
+            shorten_from: "right"
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+        Label:
+            text: root.team
+            color: 0.72, 0.80, 0.92, 1
+            font_size: "12sp"
+            shorten: True
+            shorten_from: "right"
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+
+<PanelBox@BoxLayout>:
+    title: ""
+    body: ""
+
+    orientation: "vertical"
+    padding: dp(12)
+    spacing: dp(8)
+
+    canvas.before:
+        Color:
+            rgba: 0.025, 0.05, 0.09, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(14)]
+
+    Label:
+        text: root.title
+        size_hint_y: None
+        height: dp(28)
+        color: 0, 0.9, 1, 1
+        bold: True
+        halign: "left"
+        valign: "middle"
+        text_size: self.size
+
+    ScrollView:
+        do_scroll_x: False
+        do_scroll_y: True
+        bar_width: dp(5)
+        scroll_type: ["content", "bars"]
+
+        Label:
+            text: root.body
+            color: 0.78, 0.86, 0.96, 1
+            font_size: "12sp"
+            halign: "left"
+            valign: "top"
+            text_size: self.width, None
+            size_hint_y: None
+            height: max(self.texture_size[1], self.parent.height)

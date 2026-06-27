@@ -1,0 +1,1503 @@
+#:kivy 2.3.0
+#:import dp kivy.metrics.dp
+
+
+<TopBar@BoxLayout>:
+    padding: dp(7), dp(4)
+    spacing: dp(7)
+    canvas.before:
+        Color:
+            rgba: 0.04, 0.07, 0.13, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(12)]
+
+
+<SideNav@BoxLayout>:
+    orientation: "vertical"
+    padding: dp(4)
+    spacing: dp(3)
+    canvas.before:
+        Color:
+            rgba: 0.03, 0.05, 0.09, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(12)]
+
+
+<MainContent@BoxLayout>:
+    orientation: "vertical"
+    spacing: dp(3)
+
+
+<RightPanel@BoxLayout>:
+    orientation: "vertical"
+    spacing: dp(3)
+
+
+<DashboardSection@BoxLayout>:
+    title: ""
+    orientation: "vertical"
+    padding: dp(5)
+    spacing: dp(3)
+    canvas.before:
+        Color:
+            rgba: 0.035, 0.060, 0.105, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(10)]
+
+    Label:
+        text: "[b]" + root.title + "[/b]"
+        markup: True
+        color: 0.96, 0.98, 1, 1
+        font_size: "16sp"
+        size_hint_y: None
+        height: dp(18)
+        halign: "left"
+        valign: "middle"
+        text_size: self.size
+
+
+<SummaryMetric>:
+    orientation: "vertical"
+    padding: dp(4), dp(2)
+    spacing: 0
+    canvas.before:
+        Color:
+            rgba: 0.045, 0.065, 0.11, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(8)]
+        Color:
+            rgba: root.accent
+        Line:
+            rounded_rectangle: self.x, self.y, self.width, self.height, dp(8)
+            width: 1
+
+    Label:
+        text: root.value
+        color: 0.98, 0.99, 1, 1
+        bold: True
+        font_size: "14sp"
+        shorten: True
+        shorten_from: "right"
+        halign: "center"
+        valign: "middle"
+        text_size: self.size
+
+    Label:
+        text: root.label
+        color: 0.66, 0.74, 0.86, 1
+        font_size: "8sp"
+        size_hint_y: None
+        height: dp(10)
+        shorten: True
+        shorten_from: "right"
+        halign: "center"
+        valign: "middle"
+        text_size: self.size
+
+
+<InfoBox@BoxLayout>:
+    orientation: "vertical"
+    padding: dp(5)
+    spacing: dp(3)
+    canvas.before:
+        Color:
+            rgba: 0.035, 0.060, 0.105, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(10)]
+
+
+<PanelTitle@Label>:
+    markup: True
+    color: 0.96, 0.98, 1, 1
+    font_size: "15sp"
+    size_hint_y: None
+    height: dp(17)
+    halign: "left"
+    valign: "middle"
+    text_size: self.size
+
+
+<PanelBody@Label>:
+    markup: True
+    color: 0.78, 0.84, 0.92, 1
+    font_size: "11sp"
+    halign: "left"
+    valign: "top"
+    text_size: self.size
+
+
+<NavButton@Button>:
+    active: False
+    danger: False
+    background_normal: ""
+    background_down: ""
+    color: 0.95, 0.98, 1, 1
+    bold: True
+    font_size: "12sp"
+    size_hint_y: None
+    height: dp(27)
+    halign: "left"
+    valign: "middle"
+    text_size: self.size
+    background_color:
+        (0.10, 0.28, 0.80, 1) if self.active else \
+        (0.50, 0.10, 0.10, 1) if self.danger else \
+        (0.06, 0.09, 0.14, 1)
+
+
+<LargeGameCard>:
+    orientation: "vertical"
+    padding: dp(7)
+    spacing: dp(4)
+    canvas.before:
+        Color:
+            rgba: 0.045, 0.065, 0.11, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(9)]
+        Color:
+            rgba: root.accent
+        Line:
+            rounded_rectangle: self.x, self.y, self.width, self.height, dp(9)
+            width: 1.1
+
+    AsyncImage:
+        source: root.logo_url
+        opacity: 1 if root.logo_url else 0
+        fit_mode: "contain"
+        size_hint_y: None
+        height: dp(22)
+
+    Label:
+        text: root.league
+        color: root.accent
+        bold: True
+        font_size: "11sp"
+        size_hint_y: None
+        height: dp(15) if not root.logo_url else 0
+        opacity: 0 if root.logo_url else 1
+        shorten: True
+        shorten_from: "right"
+        halign: "center"
+        valign: "middle"
+        text_size: self.size
+
+    Label:
+        text: root.main_text
+        color: 0.98, 0.99, 1, 1
+        bold: True
+        font_size: "17sp"
+        size_hint_y: None
+        height: dp(26)
+        shorten: True
+        shorten_from: "center"
+        halign: "center"
+        valign: "middle"
+        text_size: self.size
+
+    Label:
+        text: root.status
+        color: 0.74, 0.80, 0.88, 1
+        font_size: "12sp"
+        size_hint_y: None
+        height: dp(16)
+        shorten: True
+        shorten_from: "right"
+        halign: "center"
+        valign: "middle"
+        text_size: self.size
+
+    Label:
+        text: root.stats_text
+        color: 0.60, 0.88, 1, 1
+        font_size: "10sp"
+        shorten: True
+        shorten_from: "right"
+        halign: "center"
+        valign: "middle"
+        text_size: self.size
+
+
+<SmallEventCard>:
+    orientation: "vertical"
+    padding: dp(6)
+    spacing: dp(4)
+    canvas.before:
+        Color:
+            rgba: 0.045, 0.065, 0.11, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(8)]
+        Color:
+            rgba: 0.15, 0.35, 0.95, 1
+        Line:
+            rounded_rectangle: self.x, self.y, self.width, self.height, dp(8)
+            width: 1
+
+    Label:
+        text: root.title
+        color: 1, 0.55, 0.05, 1
+        bold: True
+        font_size: "10sp"
+        size_hint_y: None
+        height: dp(15)
+        shorten: True
+        shorten_from: "right"
+        halign: "center"
+        valign: "middle"
+        text_size: self.size
+
+    BoxLayout:
+        orientation: "horizontal"
+        spacing: dp(4)
+
+        BoxLayout:
+            orientation: "vertical"
+            spacing: dp(2)
+
+            AsyncImage:
+                source: root.away_logo
+                fit_mode: "contain"
+
+            Label:
+                text: root.away_abbreviation
+                color: root.away_color
+                bold: True
+                font_size: "14sp"
+                size_hint_y: None
+                height: dp(18)
+                halign: "center"
+                valign: "middle"
+                text_size: self.size
+
+            Label:
+                text: root.away_score
+                color: 0.98, 0.99, 1, 1
+                bold: True
+                font_size: "18sp"
+                size_hint_y: None
+                height: dp(22)
+                halign: "center"
+                valign: "middle"
+                text_size: self.size
+
+        Label:
+            text: "vs"
+            color: 0.50, 0.62, 0.78, 1
+            bold: True
+            font_size: "11sp"
+            size_hint_x: None
+            width: dp(24)
+            halign: "center"
+            valign: "middle"
+            text_size: self.size
+
+        BoxLayout:
+            orientation: "vertical"
+            spacing: dp(2)
+
+            AsyncImage:
+                source: root.home_logo
+                fit_mode: "contain"
+
+            Label:
+                text: root.home_abbreviation
+                color: root.home_color
+                bold: True
+                font_size: "14sp"
+                size_hint_y: None
+                height: dp(18)
+                halign: "center"
+                valign: "middle"
+                text_size: self.size
+
+            Label:
+                text: root.home_score
+                color: 0.98, 0.99, 1, 1
+                bold: True
+                font_size: "18sp"
+                size_hint_y: None
+                height: dp(22)
+                halign: "center"
+                valign: "middle"
+                text_size: self.size
+
+    Label:
+        text: root.time_text
+        color: 0.2, 0.75, 1, 1
+        font_size: "12sp"
+        size_hint_y: None
+        height: dp(16)
+        shorten: True
+        shorten_from: "right"
+        halign: "center"
+        valign: "middle"
+        text_size: self.size
+
+    BoxLayout:
+        size_hint_y: None
+        height: dp(17)
+        spacing: dp(4)
+
+        WeatherIcon:
+            icon_type: root.weather_icon
+            size_hint_x: None
+            width: dp(24)
+
+        Label:
+            text: root.weather_text
+            color: 0.72, 0.82, 0.94, 1
+            font_size: "10sp"
+            shorten: True
+            shorten_from: "right"
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+
+<CarouselMessageCard>:
+    orientation: "vertical"
+    padding: dp(8)
+    spacing: dp(5)
+    canvas.before:
+        Color:
+            rgba: 0.045, 0.065, 0.11, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(8)]
+        Color:
+            rgba: 0.30, 0.62, 1, 1
+        Line:
+            rounded_rectangle: self.x, self.y, self.width, self.height, dp(8)
+            width: 1
+
+    Label:
+        text: root.title
+        color: 0.98, 0.99, 1, 1
+        bold: True
+        font_size: "16sp"
+        halign: "center"
+        valign: "middle"
+        text_size: self.size
+
+    Label:
+        text: root.message
+        color: 0.72, 0.82, 0.94, 1
+        font_size: "12sp"
+        halign: "center"
+        valign: "middle"
+        text_size: self.size
+
+
+<NewsCard>:
+    orientation: "horizontal"
+    padding: dp(6), dp(4)
+    spacing: dp(6)
+    canvas.before:
+        Color:
+            rgba: 0.045 + root.flash_alpha * 0.06, 0.065 + root.flash_alpha * 0.12, 0.11 + root.flash_alpha * 0.20, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(8)]
+        Color:
+            rgba: 0.30, 0.62, 1, root.flash_alpha
+        Line:
+            rounded_rectangle: self.x, self.y, self.width, self.height, dp(8)
+            width: 1.2
+        Color:
+            rgba: 0.30, 0.62, 1, root.flash_alpha
+        RoundedRectangle:
+            pos: self.x, self.y + dp(5)
+            size: dp(3), self.height - dp(10)
+            radius: [dp(2)]
+
+    AsyncImage:
+        source: root.image_url
+        opacity: 1 if root.image_url else 0
+        fit_mode: "contain"
+        size_hint_x: None
+        width: dp(72) if root.image_url else 0
+
+    BoxLayout:
+        orientation: "vertical"
+        spacing: dp(1)
+
+        Label:
+            text: root.headline
+            color: (0.72, 0.92, 1, 1) if root.opening else (0.92, 0.96, 1, 1)
+            bold: root.opening
+            font_size: "13sp"
+            size_hint_y: None
+            height: dp(18)
+            shorten: True
+            shorten_from: "right"
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+        Label:
+            text: root.published
+            color: 0.50, 0.62, 0.78, 1
+            font_size: "9sp"
+            size_hint_y: None
+            height: dp(12)
+            shorten: True
+            shorten_from: "right"
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+        Label:
+            text: root.description
+            color: 0.76, 0.83, 0.92, 1
+            font_size: "11sp"
+            shorten: True
+            shorten_from: "right"
+            halign: "left"
+            valign: "top"
+            text_size: self.size
+
+    Label:
+        text: ">"
+        color: 0.50, 0.62, 0.78, 1
+        bold: True
+        font_size: "14sp"
+        size_hint_x: None
+        width: dp(18) if root.url else 0
+        opacity: 1 if root.url else 0
+        halign: "center"
+        valign: "middle"
+        text_size: self.size
+
+
+<CalendarHeader@Label>:
+    color: 0.50, 0.62, 0.78, 1
+    font_size: "8sp"
+    bold: True
+    halign: "center"
+    valign: "middle"
+    text_size: self.size
+
+
+<CalendarDot>:
+    size_hint: None, None
+    size: dp(6), dp(6)
+    canvas:
+        Color:
+            rgba: root.dot_color
+        Ellipse:
+            pos: self.pos
+            size: self.size
+
+
+<CalendarDay>:
+    orientation: "vertical"
+    padding: dp(2), dp(1)
+    spacing: 0
+    canvas.before:
+        Color:
+            rgba: root.bg_color
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(5)]
+        Color:
+            rgba: root.border_color
+        Line:
+            rounded_rectangle: self.x, self.y, self.width, self.height, dp(5)
+            width: 1.1
+
+    Label:
+        text: root.day_text
+        color: (0.98, 1.0, 1.0, 1) if root.is_today else (0.78, 0.86, 0.96, 1)
+        bold: True
+        font_size: "8sp"
+        size_hint_y: None
+        height: dp(10)
+        halign: "center"
+        valign: "middle"
+        text_size: self.size
+
+    GridLayout:
+        id: dots
+        cols: 6
+        spacing: dp(1)
+        size_hint_y: None
+        height: dp(13)
+        col_default_width: dp(6)
+        col_force_default: True
+        row_default_height: dp(6)
+        row_force_default: True
+
+    Label:
+        text: root.overflow_text
+        color: 0.65, 0.72, 0.84, 1
+        font_size: "8sp"
+        size_hint_y: None
+        height: dp(8)
+        halign: "center"
+        valign: "middle"
+        text_size: self.size
+
+
+<TeamBox@BoxLayout>:
+    logo_source: ""
+    abbrev: ""
+    team_name: ""
+    team_color: 0.95, 0.98, 1, 1
+    orientation: "horizontal"
+    spacing: dp(6)
+
+    AnchorLayout:
+        size_hint_x: None
+        width: dp(44)
+        anchor_x: "center"
+        anchor_y: "center"
+
+        AsyncImage:
+            source: root.logo_source
+            fit_mode: "contain"
+            size_hint: None, None
+            size: dp(40), dp(40)
+
+    BoxLayout:
+        orientation: "vertical"
+        spacing: dp(2)
+
+        Label:
+            text: root.abbrev
+            color: root.team_color
+            bold: True
+            font_size: "15sp"
+            size_hint_y: None
+            height: dp(22)
+            halign: "left"
+            valign: "bottom"
+            text_size: self.size
+
+        Label:
+            text: root.team_name
+            color: 0.72, 0.78, 0.88, 1
+            font_size: "10sp"
+            shorten: True
+            shorten_from: "right"
+            halign: "left"
+            valign: "top"
+            text_size: self.size
+
+
+<CalendarEventCard>:
+    orientation: "vertical"
+    padding: dp(9)
+    spacing: dp(5)
+    canvas.before:
+        Color:
+            rgba: 0.03, 0.06, 0.10, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(12)]
+        Color:
+            rgba: root.sport_color
+        Line:
+            rounded_rectangle: self.x, self.y, self.width, self.height, dp(12)
+            width: 1.4
+
+    BoxLayout:
+        orientation: "horizontal"
+        size_hint_y: None
+        height: dp(24)
+        spacing: dp(5)
+
+        Label:
+            text: root.sport_label
+            color: root.sport_color
+            bold: True
+            font_size: "10sp"
+            size_hint_x: None
+            width: dp(36)
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+        Label:
+            text: root.title
+            color: 0.96, 0.98, 1, 1
+            bold: True
+            font_size: "14sp"
+            shorten: True
+            shorten_from: "right"
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+        Label:
+            text: root.time_text
+            color: 0.72, 0.92, 1, 1
+            bold: True
+            font_size: "10sp"
+            size_hint_x: None
+            width: dp(78)
+            halign: "right"
+            valign: "middle"
+            text_size: self.size
+
+    BoxLayout:
+        opacity: 0 if root.is_f1 else 1
+        height: 0 if root.is_f1 else dp(56)
+        size_hint_y: None
+        spacing: dp(6)
+
+        TeamBox:
+            logo_source: root.away_logo
+            abbrev: root.away_abbreviation
+            team_name: root.away_name
+            team_color: root.away_color
+
+        Label:
+            text: "@"
+            color: 0.50, 0.62, 0.78, 1
+            bold: True
+            font_size: "12sp"
+            size_hint_x: None
+            width: dp(24)
+            halign: "center"
+            valign: "middle"
+            text_size: self.size
+
+        TeamBox:
+            logo_source: root.home_logo
+            abbrev: root.home_abbreviation
+            team_name: root.home_name
+            team_color: root.home_color
+
+    BoxLayout:
+        opacity: 1 if root.is_f1 else 0
+        height: dp(56) if root.is_f1 else 0
+        size_hint_y: None
+        spacing: dp(4)
+
+        Label:
+            text: root.session_text
+            color: 0.98, 0.99, 1, 1
+            bold: True
+            font_size: "14sp"
+            size_hint_x: 0.42
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+        Label:
+            text: root.broadcast_text
+            color: 0.76, 0.83, 0.92, 1
+            font_size: "11sp"
+            shorten: True
+            shorten_from: "right"
+            halign: "right"
+            valign: "middle"
+            text_size: self.size
+
+    BoxLayout:
+        orientation: "vertical"
+        spacing: dp(1)
+
+        Label:
+            text: root.status_text
+            color: 0.50, 0.62, 0.78, 1
+            font_size: "10sp"
+            size_hint_y: None
+            height: dp(14)
+            shorten: True
+            shorten_from: "right"
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+        Label:
+            text: root.venue_text
+            color: 0.78, 0.86, 0.96, 1
+            font_size: "10sp"
+            size_hint_y: None
+            height: dp(14)
+            shorten: True
+            shorten_from: "right"
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+        Label:
+            text: root.weather_text
+            color: 0.72, 0.82, 0.94, 1
+            font_size: "10sp"
+            size_hint_y: None
+            height: dp(14)
+            shorten: True
+            shorten_from: "right"
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+
+<LegacyDashboardScreen@BoxLayout>:
+    orientation: "vertical"
+    padding: dp(3)
+    spacing: dp(3)
+    canvas.before:
+        Color:
+            rgba: 0.015, 0.025, 0.045, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    TopBar:
+        size_hint_y: None
+        height: dp(46)
+
+        Label:
+            text: "[b]NASH[color=3b82f6].[/color]TRACK[/b]"
+            markup: True
+            color: 0.98, 0.99, 1, 1
+            font_size: "20sp"
+            size_hint_x: 0.24
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+        BoxLayout:
+            orientation: "vertical"
+            spacing: dp(1)
+
+            Label:
+                text: "[b]Good evening, Nash[/b]"
+                markup: True
+                color: 0.96, 0.98, 1, 1
+                font_size: "15sp"
+                size_hint_y: 0.56
+                halign: "left"
+                valign: "bottom"
+                text_size: self.size
+
+            Label:
+                id: focus_label
+                text: "All sports - 0 live, 0 upcoming"
+                color: 0.65, 0.70, 0.78, 1
+                font_size: "10sp"
+                size_hint_y: 0.44
+                halign: "left"
+                valign: "top"
+                text_size: self.size
+
+        Label:
+            id: last_updated
+            text: "Updated --"
+            color: 0.82, 0.88, 0.96, 1
+            font_size: "11sp"
+            size_hint_x: 0.22
+            halign: "right"
+            valign: "middle"
+            text_size: self.size
+
+        Label:
+            text: "LIVE"
+            color: 0.48, 0.88, 0.72, 1
+            bold: True
+            font_size: "14sp"
+            size_hint_x: 0.10
+            halign: "right"
+            valign: "middle"
+            text_size: self.size
+
+    BoxLayout:
+        orientation: "horizontal"
+        spacing: dp(3)
+
+        SideNav:
+            size_hint_x: None
+            width: dp(145)
+
+            NavButton:
+                text: "Dashboard"
+                active: root.active_view == "home" and root.active_sport == "all"
+                on_release: root.set_sport("all")
+
+            NavButton:
+                text: "F1"
+                disabled: True
+                opacity: 0
+                height: 0
+                active: root.active_view == "home" and root.active_sport == "f1"
+                on_release: root.set_sport("f1")
+
+            NavButton:
+                text: "Basketball"
+                disabled: True
+                opacity: 0
+                height: 0
+                active: root.active_view == "home" and root.active_sport == "basketball"
+                on_release: root.set_sport("basketball")
+
+            NavButton:
+                text: "Football"
+                disabled: True
+                opacity: 0
+                height: 0
+                active: root.active_view == "home" and root.active_sport == "football"
+                on_release: root.set_sport("football")
+
+            NavButton:
+                text: "Soccer"
+                disabled: True
+                opacity: 0
+                height: 0
+                active: root.active_view == "home" and root.active_sport == "soccer"
+                on_release: root.set_sport("soccer")
+
+            Widget:
+                size_hint_y: 0.04
+
+            # Favorites, Settings, Debug, and sport-specific filters remain disabled for now.
+            NavButton:
+                text: "Calendar"
+                active: root.active_view == "calendar"
+                on_release: root.show_calendar()
+
+            NavButton:
+                text: "API Explorer"
+                active: root.active_view == "api"
+                on_release: root.show_api()
+
+            NavButton:
+                text: "Favorites"
+                disabled: True
+                opacity: 0
+                height: 0
+                active: root.active_view == "favorites"
+                on_release: root.show_favorites()
+
+            NavButton:
+                text: "Settings"
+                active: root.active_view == "settings"
+                on_release: root.show_settings()
+
+            Widget:
+
+            NavButton:
+                text: "Refresh"
+                on_release: root.refresh()
+
+            NavButton:
+                id: debug_nav_button
+                text: "Show Debug"
+                disabled: True
+                opacity: 0
+                height: 0
+                active: root.debug_open
+                on_release: root.toggle_debug()
+
+        MainContent:
+            size_hint_x: 1
+
+            DashboardSection:
+                title: "Now / Next"
+                size_hint_y: 0.58 if root.active_view == "home" and root.is_dashboard_module_enabled("now_next", root.settings_version) else None
+                height: 0 if root.active_view != "home" or not root.is_dashboard_module_enabled("now_next", root.settings_version) else dp(1)
+                opacity: 1 if root.active_view == "home" and root.is_dashboard_module_enabled("now_next", root.settings_version) else 0
+                disabled: root.active_view != "home" or not root.is_dashboard_module_enabled("now_next", root.settings_version)
+
+                GridLayout:
+                    id: live_games
+                    cols: 1
+                    spacing: dp(4)
+
+            DashboardSection:
+                title: "Top Headlines"
+                size_hint_y: 0.42 if root.active_view == "home" and root.is_dashboard_module_enabled("headlines", root.settings_version) else None
+                height: 0 if root.active_view != "home" or not root.is_dashboard_module_enabled("headlines", root.settings_version) else dp(1)
+                opacity: 1 if root.active_view == "home" and root.is_dashboard_module_enabled("headlines", root.settings_version) else 0
+                disabled: root.active_view != "home" or not root.is_dashboard_module_enabled("headlines", root.settings_version)
+
+                ScrollView:
+                    do_scroll_x: False
+                    do_scroll_y: True
+                    scroll_type: ["content", "bars"]
+                    scroll_distance: dp(6)
+                    scroll_timeout: 180
+                    bar_width: dp(6)
+
+                    GridLayout:
+                        id: headline_cards
+                        cols: 1
+                        spacing: dp(4)
+                        size_hint_y: None
+                        height: self.minimum_height
+
+            DashboardSection:
+                title: "API Explorer"
+                size_hint_y: 0.45 if root.active_view == "api" else None
+                height: 0 if root.active_view != "api" else dp(1)
+                opacity: 1 if root.active_view == "api" else 0
+                disabled: root.active_view != "api"
+
+                GridLayout:
+                    id: api_controls
+                    cols: 1
+                    spacing: dp(3)
+
+            DashboardSection:
+                title: "Response Preview"
+                size_hint_y: 0.55 if root.active_view == "api" else None
+                height: 0 if root.active_view != "api" else dp(1)
+                opacity: 1 if root.active_view == "api" else 0
+                disabled: root.active_view != "api"
+
+                GridLayout:
+                    id: api_preview
+                    cols: 1
+                    spacing: dp(3)
+
+            DashboardSection:
+                title: "Calendar"
+                size_hint_y: 1 if root.active_view == "calendar" else None
+                height: 0 if root.active_view != "calendar" else dp(1)
+                opacity: 1 if root.active_view == "calendar" else 0
+                disabled: root.active_view != "calendar"
+
+                PanelBody:
+                    id: calendar_month_label
+                    text: ""
+                    size_hint_y: None
+                    height: dp(22)
+                    font_size: "15sp"
+                    bold: True
+                    color: 0.92, 0.96, 1, 1
+                    halign: "center"
+                    valign: "middle"
+
+                GridLayout:
+                    id: main_calendar_header
+                    cols: 7
+                    spacing: dp(2)
+                    size_hint_y: None
+                    height: dp(18)
+
+                GridLayout:
+                    id: main_calendar_grid
+                    cols: 7
+                    spacing: dp(2)
+
+                PanelBody:
+                    id: main_calendar_legend
+                    text: ""
+                    size_hint_y: None
+                    height: dp(18)
+                    font_size: "10sp"
+                    halign: "center"
+                    valign: "middle"
+
+            DashboardSection:
+                title: "Favorites"
+                size_hint_y: 1 if root.active_view == "favorites" else None
+                height: 0 if root.active_view != "favorites" else dp(1)
+                opacity: 1 if root.active_view == "favorites" else 0
+                disabled: root.active_view != "favorites"
+
+                PanelBody:
+                    id: favorites_main
+                    text: "Loading favorites"
+
+            DashboardSection:
+                title: "Game Detail"
+                size_hint_y: 1 if root.active_view == "game_detail" else None
+                height: 0 if root.active_view != "game_detail" else dp(1)
+                opacity: 1 if root.active_view == "game_detail" else 0
+                disabled: root.active_view != "game_detail"
+
+                GridLayout:
+                    id: game_detail_body
+                    cols: 1
+                    spacing: dp(3)
+
+            DashboardSection:
+                title: "Settings"
+                size_hint_y: 1 if root.active_view == "settings" else None
+                height: 0 if root.active_view != "settings" else dp(1)
+                opacity: 1 if root.active_view == "settings" else 0
+                disabled: root.active_view != "settings"
+
+                BoxLayout:
+                    id: settings_body
+                    orientation: "vertical"
+                    spacing: dp(6)
+
+                    PanelTitle:
+                        text: "[b]Sports Feeds[/b]"
+
+                    GridLayout:
+                        cols: 2
+                        spacing: dp(6)
+                        size_hint_y: None
+                        height: dp(102)
+
+                        BoxLayout:
+                            size_hint_y: None
+                            height: dp(30)
+                            spacing: dp(8)
+                            Label:
+                                text: "Basketball (NBA)"
+                                color: 0.88, 0.93, 1, 1
+                                font_size: "14sp"
+                                halign: "left"
+                                valign: "middle"
+                                text_size: self.size
+                            CheckBox:
+                                size_hint_x: None
+                                width: dp(36)
+                                active: root.is_home_sport_enabled("NBA", root.settings_version)
+                                on_active: root.set_home_sport_enabled("NBA", self.active)
+
+                        BoxLayout:
+                            size_hint_y: None
+                            height: dp(30)
+                            spacing: dp(8)
+                            Label:
+                                text: "Football (NFL)"
+                                color: 0.88, 0.93, 1, 1
+                                font_size: "14sp"
+                                halign: "left"
+                                valign: "middle"
+                                text_size: self.size
+                            CheckBox:
+                                size_hint_x: None
+                                width: dp(36)
+                                active: root.is_home_sport_enabled("NFL", root.settings_version)
+                                on_active: root.set_home_sport_enabled("NFL", self.active)
+
+                        BoxLayout:
+                            size_hint_y: None
+                            height: dp(30)
+                            spacing: dp(8)
+                            Label:
+                                text: "Baseball (MLB)"
+                                color: 0.88, 0.93, 1, 1
+                                font_size: "14sp"
+                                halign: "left"
+                                valign: "middle"
+                                text_size: self.size
+                            CheckBox:
+                                size_hint_x: None
+                                width: dp(36)
+                                active: root.is_home_sport_enabled("MLB", root.settings_version)
+                                on_active: root.set_home_sport_enabled("MLB", self.active)
+
+                        BoxLayout:
+                            size_hint_y: None
+                            height: dp(30)
+                            spacing: dp(8)
+                            Label:
+                                text: "Hockey (NHL)"
+                                color: 0.88, 0.93, 1, 1
+                                font_size: "14sp"
+                                halign: "left"
+                                valign: "middle"
+                                text_size: self.size
+                            CheckBox:
+                                size_hint_x: None
+                                width: dp(36)
+                                active: root.is_home_sport_enabled("NHL", root.settings_version)
+                                on_active: root.set_home_sport_enabled("NHL", self.active)
+
+                        BoxLayout:
+                            size_hint_y: None
+                            height: dp(30)
+                            spacing: dp(8)
+                            Label:
+                                text: "Soccer (EPL)"
+                                color: 0.88, 0.93, 1, 1
+                                font_size: "14sp"
+                                halign: "left"
+                                valign: "middle"
+                                text_size: self.size
+                            CheckBox:
+                                size_hint_x: None
+                                width: dp(36)
+                                active: root.is_home_sport_enabled("EPL", root.settings_version)
+                                on_active: root.set_home_sport_enabled("EPL", self.active)
+
+                        BoxLayout:
+                            size_hint_y: None
+                            height: dp(30)
+                            spacing: dp(8)
+                            Label:
+                                text: "Formula 1"
+                                color: 0.88, 0.93, 1, 1
+                                font_size: "14sp"
+                                halign: "left"
+                                valign: "middle"
+                                text_size: self.size
+                            CheckBox:
+                                size_hint_x: None
+                                width: dp(36)
+                                active: root.is_home_sport_enabled("F1", root.settings_version)
+                                on_active: root.set_home_sport_enabled("F1", self.active)
+
+                    PanelTitle:
+                        text: "[b]Dashboard Modules[/b]"
+
+                    GridLayout:
+                        cols: 2
+                        spacing: dp(6)
+                        size_hint_y: None
+                        height: dp(68)
+
+                        BoxLayout:
+                            size_hint_y: None
+                            height: dp(30)
+                            spacing: dp(8)
+                            Label:
+                                text: "Today Summary"
+                                color: 0.88, 0.93, 1, 1
+                                font_size: "14sp"
+                                halign: "left"
+                                valign: "middle"
+                                text_size: self.size
+                            CheckBox:
+                                size_hint_x: None
+                                width: dp(36)
+                                active: root.is_dashboard_module_enabled("today_summary", root.settings_version)
+                                on_active: root.set_dashboard_module_enabled("today_summary", self.active)
+
+                        BoxLayout:
+                            size_hint_y: None
+                            height: dp(30)
+                            spacing: dp(8)
+                            Label:
+                                text: "Now / Next"
+                                color: 0.88, 0.93, 1, 1
+                                font_size: "14sp"
+                                halign: "left"
+                                valign: "middle"
+                                text_size: self.size
+                            CheckBox:
+                                size_hint_x: None
+                                width: dp(36)
+                                active: root.is_dashboard_module_enabled("now_next", root.settings_version)
+                                on_active: root.set_dashboard_module_enabled("now_next", self.active)
+
+                        BoxLayout:
+                            size_hint_y: None
+                            height: dp(30)
+                            spacing: dp(8)
+                            Label:
+                                text: "Top Headlines"
+                                color: 0.88, 0.93, 1, 1
+                                font_size: "14sp"
+                                halign: "left"
+                                valign: "middle"
+                                text_size: self.size
+                            CheckBox:
+                                size_hint_x: None
+                                width: dp(36)
+                                active: root.is_dashboard_module_enabled("headlines", root.settings_version)
+                                on_active: root.set_dashboard_module_enabled("headlines", self.active)
+
+                        BoxLayout:
+                            size_hint_y: None
+                            height: dp(30)
+                            spacing: dp(8)
+                            Label:
+                                text: "Right Calendar"
+                                color: 0.88, 0.93, 1, 1
+                                font_size: "14sp"
+                                halign: "left"
+                                valign: "middle"
+                                text_size: self.size
+                            CheckBox:
+                                size_hint_x: None
+                                width: dp(36)
+                                active: root.is_dashboard_module_enabled("right_calendar", root.settings_version)
+                                on_active: root.set_dashboard_module_enabled("right_calendar", self.active)
+
+                    Widget:
+
+                    # Legacy static setting rows are disabled while Settings owns this surface.
+                    BoxLayout:
+                        opacity: 0
+                        disabled: True
+                        size_hint_y: None
+                        height: 0
+                        spacing: dp(8)
+                        Label:
+                            text: "Basketball (NBA)"
+                            color: 0.88, 0.93, 1, 1
+                            font_size: "14sp"
+                            halign: "left"
+                            valign: "middle"
+                            text_size: self.size
+                        CheckBox:
+                            size_hint_x: None
+                            width: dp(36)
+                            active: root.is_home_sport_enabled("NBA", root.settings_version)
+                            on_active: root.set_home_sport_enabled("NBA", self.active)
+
+                    BoxLayout:
+                        opacity: 0
+                        disabled: True
+                        size_hint_y: None
+                        height: 0
+                        spacing: dp(8)
+                        Label:
+                            text: "Football (NFL)"
+                            color: 0.88, 0.93, 1, 1
+                            font_size: "14sp"
+                            halign: "left"
+                            valign: "middle"
+                            text_size: self.size
+                        CheckBox:
+                            size_hint_x: None
+                            width: dp(36)
+                            active: root.is_home_sport_enabled("NFL", root.settings_version)
+                            on_active: root.set_home_sport_enabled("NFL", self.active)
+
+                    BoxLayout:
+                        opacity: 0
+                        disabled: True
+                        size_hint_y: None
+                        height: 0
+                        spacing: dp(8)
+                        Label:
+                            text: "Baseball (MLB)"
+                            color: 0.88, 0.93, 1, 1
+                            font_size: "14sp"
+                            halign: "left"
+                            valign: "middle"
+                            text_size: self.size
+                        CheckBox:
+                            size_hint_x: None
+                            width: dp(36)
+                            active: root.is_home_sport_enabled("MLB", root.settings_version)
+                            on_active: root.set_home_sport_enabled("MLB", self.active)
+
+                    BoxLayout:
+                        opacity: 0
+                        disabled: True
+                        size_hint_y: None
+                        height: 0
+                        spacing: dp(8)
+                        Label:
+                            text: "Hockey (NHL)"
+                            color: 0.88, 0.93, 1, 1
+                            font_size: "14sp"
+                            halign: "left"
+                            valign: "middle"
+                            text_size: self.size
+                        CheckBox:
+                            size_hint_x: None
+                            width: dp(36)
+                            active: root.is_home_sport_enabled("NHL", root.settings_version)
+                            on_active: root.set_home_sport_enabled("NHL", self.active)
+
+                    BoxLayout:
+                        opacity: 0
+                        disabled: True
+                        size_hint_y: None
+                        height: 0
+                        spacing: dp(8)
+                        Label:
+                            text: "Soccer (EPL)"
+                            color: 0.88, 0.93, 1, 1
+                            font_size: "14sp"
+                            halign: "left"
+                            valign: "middle"
+                            text_size: self.size
+                        CheckBox:
+                            size_hint_x: None
+                            width: dp(36)
+                            active: root.is_home_sport_enabled("EPL", root.settings_version)
+                            on_active: root.set_home_sport_enabled("EPL", self.active)
+
+                    BoxLayout:
+                        opacity: 0
+                        disabled: True
+                        size_hint_y: None
+                        height: 0
+                        spacing: dp(8)
+                        Label:
+                            text: "Formula 1"
+                            color: 0.88, 0.93, 1, 1
+                            font_size: "14sp"
+                            halign: "left"
+                            valign: "middle"
+                            text_size: self.size
+                        CheckBox:
+                            size_hint_x: None
+                            width: dp(36)
+                            active: root.is_home_sport_enabled("F1", root.settings_version)
+                            on_active: root.set_home_sport_enabled("F1", self.active)
+
+                    Widget:
+
+        RightPanel:
+            size_hint_x: None
+            width: dp(320) if root.active_view == "home" and (root.is_dashboard_module_enabled("today_summary", root.settings_version) or root.is_dashboard_module_enabled("right_calendar", root.settings_version)) else 0
+            opacity: 1 if root.active_view == "home" and (root.is_dashboard_module_enabled("today_summary", root.settings_version) or root.is_dashboard_module_enabled("right_calendar", root.settings_version)) else 0
+            disabled: root.active_view != "home" or not (root.is_dashboard_module_enabled("today_summary", root.settings_version) or root.is_dashboard_module_enabled("right_calendar", root.settings_version))
+
+            InfoBox:
+                size_hint_y: None
+                height: dp(78) if root.is_dashboard_module_enabled("today_summary", root.settings_version) else 0
+                opacity: 1 if root.is_dashboard_module_enabled("today_summary", root.settings_version) else 0
+                disabled: not root.is_dashboard_module_enabled("today_summary", root.settings_version)
+
+                PanelTitle:
+                    text: "[b]Today[/b]"
+
+                GridLayout:
+                    id: today_summary
+                    cols: 2
+                    spacing: dp(2)
+
+            InfoBox:
+                size_hint_y: 1 if root.is_dashboard_module_enabled("right_calendar", root.settings_version) else None
+                height: 0 if not root.is_dashboard_module_enabled("right_calendar", root.settings_version) else dp(1)
+                opacity: 1 if root.is_dashboard_module_enabled("right_calendar", root.settings_version) else 0
+                disabled: not root.is_dashboard_module_enabled("right_calendar", root.settings_version)
+
+                PanelTitle:
+                    text: "[b]Next 4 Weeks[/b]"
+
+                GridLayout:
+                    id: sport_toggles
+                    cols: 3
+                    spacing: dp(2)
+                    size_hint_y: None
+                    height: 0
+                    opacity: 0
+                    disabled: True
+
+                GridLayout:
+                    id: calendar_header
+                    cols: 7
+                    spacing: dp(2)
+                    size_hint_y: None
+                    height: dp(11)
+
+                GridLayout:
+                    id: calendar_grid
+                    cols: 7
+                    spacing: dp(2)
+
+                PanelBody:
+                    id: calendar_legend
+                    text: "Calendar feed will live here."
+                    size_hint_y: None
+                    height: dp(14)
+                    font_size: "9sp"
+                    halign: "center"
+                    valign: "middle"
+
+            InfoBox:
+                size_hint_y: None
+                height: 0
+                opacity: 0
+                disabled: True
+
+                PanelTitle:
+                    text: "[b]Favorites[/b]"
+
+                PanelBody:
+                    id: favorites_list
+                    text: "Loading favorites"
+                    shorten: True
+                    shorten_from: "right"
+
+            InfoBox:
+                size_hint_y: None
+                height: 0
+                opacity: 0
+                disabled: True
+
+                PanelTitle:
+                    text: "[b]Upcoming Events[/b]"
+
+                BoxLayout:
+                    id: upcoming_events
+                    orientation: "vertical"
+                    size_hint_y: None
+                    height: dp(44)
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: dp(30)
+                    spacing: dp(5)
+
+                    LoadingSpinner:
+                        id: api_loading_spinner
+                        active: False
+                        size_hint_x: None
+                        width: dp(24)
+
+                    PanelBody:
+                        id: api_status
+                        text: "Checking score feed"
+                        font_size: "10sp"
+
+    BoxLayout:
+        id: debug_drawer
+        orientation: "vertical"
+        size_hint_y: None
+        height: dp(230) if root.debug_open else 0
+        opacity: 1 if root.debug_open else 0
+        disabled: not root.debug_open
+        padding: dp(5)
+        spacing: dp(3)
+        canvas.before:
+            Color:
+                rgba: 0.018, 0.026, 0.040, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+            Color:
+                rgba: 0.18, 0.34, 0.58, 1
+            Line:
+                points: self.x, self.top, self.right, self.top
+                width: 1.2
+
+        BoxLayout:
+            size_hint_y: None
+            height: dp(24)
+            spacing: dp(6)
+
+            Label:
+                text: "[b]Debug Console[/b]"
+                markup: True
+                color: 0.92, 0.96, 1, 1
+                font_size: "12sp"
+                halign: "left"
+                valign: "middle"
+                text_size: self.size
+
+            Label:
+                text: "API payloads for the active window"
+                color: 0.50, 0.62, 0.78, 1
+                font_size: "10sp"
+                halign: "right"
+                valign: "middle"
+                text_size: self.size
+
+        BoxLayout:
+            id: debug_body
+            orientation: "vertical"

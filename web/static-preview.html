@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nash Track Preview</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand"><span>NASH</span><b>.</b><strong>TRACK</strong></div>
+        <nav class="nav-stack">
+          <button class="nav-item active"><span>Home</span><span>Dashboard</span></button>
+          <button class="nav-item red"><span>F1</span><span>F1</span></button>
+          <button class="nav-item orange"><span>NBA</span><span>Basketball</span></button>
+          <button class="nav-item green"><span>NFL</span><span>Football</span></button>
+          <button class="nav-item"><span>FC</span><span>Soccer</span></button>
+        </nav>
+        <div class="nav-divider"></div>
+        <nav class="nav-stack utility">
+          <button class="nav-item"><span>*</span><span>Favorites</span></button>
+          <button class="nav-item"><span>Cal</span><span>Calendar</span></button>
+          <button class="nav-item"><span>Set</span><span>Settings</span></button>
+        </nav>
+        <div class="sync-status"><span class="status-dot"></span><span>All data synced</span><small>Just now</small></div>
+      </aside>
+
+      <div class="content-shell">
+        <header class="topbar">
+          <div>
+            <h1>Good evening, Nash</h1>
+            <p>Here's what's happening in your sports world.</p>
+          </div>
+          <div class="system-strip">
+            <div class="time-block"><strong>9:53 PM</strong><span>EST</span><small>May 23, 2025</small></div>
+            <div class="weather-pill"><span>Cloud</span><div><strong>87F</strong><span>Partly Cloudy</span></div></div>
+            <span>WiFi</span>
+          </div>
+        </header>
+
+        <main class="dashboard">
+          <div class="primary-column">
+            <section class="panel">
+              <div class="section-title"><div><h2>Live & On Going</h2><span class="live-badge">LIVE</span></div><button class="link-button">View All</button></div>
+              <div class="live-grid">
+                <article class="live-card orange"><div class="card-league">NBA Playoffs</div><div class="score-row"><div class="team-mark orange">B</div><strong>88 - 88</strong><div class="team-mark orange">NY</div></div><div class="team-row"><span>BOS</span><b>Q3 | 06:23</b><span>NYK</span></div><div class="meter"><span style="width:48%"></span></div><button class="watch-button">Watch Live</button></article>
+                <article class="live-card orange"><div class="card-league">NBA Playoffs</div><div class="score-row"><div class="team-mark orange">D</div><strong>17 - 23</strong><div class="team-mark orange">O</div></div><div class="team-row"><span>DET</span><b>Q2 | 08:13</b><span>ORL</span></div><div class="meter"><span style="width:40%"></span></div><button class="watch-button">Watch Live</button></article>
+                <article class="live-card red"><div class="card-league">F1 Practice</div><div class="score-row"><div class="team-mark red">M</div><strong>P1 - P3</strong><div class="team-mark red">RB</div></div><div class="team-row"><span>MER</span><b>Practice 2</b><span>RBR</span></div><div class="meter"><span style="width:45%"></span></div><button class="watch-button">Live Timing</button></article>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="section-title"><div><h2>Starting Soon</h2></div><button class="link-button">View All</button></div>
+              <div class="soon-grid">
+                <article class="soon-card orange"><span>NBA Playoffs</span><strong>BOS vs IND</strong><p>May 25, 8:00 PM</p><b>2h 7m</b></article>
+                <article class="soon-card red"><span>F1 Race</span><strong>Monaco GP</strong><p>May 26, 3:00 PM</p><b>1d 18h</b></article>
+                <article class="soon-card green"><span>Soccer</span><strong>MCI vs WHU</strong><p>May 25, 11:30 AM</p><b>14h 37m</b></article>
+                <article class="soon-card blue"><span>NFL Preseason</span><strong>DAL vs LV</strong><p>Aug 9, 8:00 PM</p><b>78d 7h</b></article>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="section-title"><div><h2>Top Headlines</h2></div><button class="link-button">View All</button></div>
+              <div class="headline-row">
+                <article class="headline-card"><div class="headline-thumb"></div><div><strong>Verstappen fastest in F1 Practice 2 in Monaco</strong><span>F1 - 2h ago</span></div></article>
+                <article class="headline-card"><div class="headline-thumb"></div><div><strong>Celtics tie series 2-2 with win over Pacers</strong><span>NBA - 1h ago</span></div></article>
+                <article class="headline-card"><div class="headline-thumb"></div><div><strong>Haaland nets hat trick as City dominate</strong><span>Premier League - 3h ago</span></div></article>
+                <article class="headline-card"><div class="headline-thumb"></div><div><strong>Lakers advance to Western Conference Finals</strong><span>NBA - 4h ago</span></div></article>
+              </div>
+            </section>
+          </div>
+
+          <aside class="right-column">
+            <section class="panel side-card calendar-panel">
+              <div class="side-title"><h2>Calendar</h2><span>May 2025</span></div>
+              <div class="weekday-row"><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>
+              <div class="calendar-grid">
+                <button class="calendar-day muted">23</button><button class="calendar-day muted">24</button><button class="calendar-day muted">25</button><button class="calendar-day">1</button><button class="calendar-day dots">2<i></i></button><button class="calendar-day">3</button><button class="calendar-day dots">4<i></i></button>
+                <button class="calendar-day dots">5<i></i></button><button class="calendar-day">6</button><button class="calendar-day dots">7<i></i></button><button class="calendar-day">8</button><button class="calendar-day dots">9<i></i></button><button class="calendar-day dots">10<i></i></button><button class="calendar-day">11</button>
+                <button class="calendar-day dots">12<i></i></button><button class="calendar-day">13</button><button class="calendar-day">14</button><button class="calendar-day">15</button><button class="calendar-day">16</button><button class="calendar-day">17</button><button class="calendar-day">18</button>
+                <button class="calendar-day dots">19<i></i></button><button class="calendar-day">20</button><button class="calendar-day">21</button><button class="calendar-day">22</button><button class="calendar-day selected">23<i></i></button><button class="calendar-day dots">24<i></i></button><button class="calendar-day">25</button>
+                <button class="calendar-day dots">26<i></i></button><button class="calendar-day dots">27<i></i></button><button class="calendar-day">28</button><button class="calendar-day">29</button><button class="calendar-day">30</button><button class="calendar-day">31</button><button class="calendar-day muted">1</button>
+              </div>
+              <div class="legend"><span class="pink">F1</span><span class="orange">NBA</span><span class="blue">Soccer</span><span class="red">NFL</span></div>
+            </section>
+
+            <section class="panel side-card">
+              <div class="side-title"><h2>Favorites</h2><button>Manage</button></div>
+              <div class="favorite-list">
+                <div class="favorite-row"><div class="mini-logo">FER</div><div><strong>Ferrari</strong><span>F1 Team</span></div><b>*</b></div>
+                <div class="favorite-row"><div class="mini-logo">LAL</div><div><strong>Los Angeles Lakers</strong><span>NBA</span></div><b>*</b></div>
+                <div class="favorite-row"><div class="mini-logo">MU</div><div><strong>Manchester United</strong><span>Soccer</span></div><b>*</b></div>
+                <div class="favorite-row"><div class="mini-logo">DAL</div><div><strong>Dallas Cowboys</strong><span>NFL</span></div><b>*</b></div>
+              </div>
+            </section>
+
+            <section class="panel side-card">
+              <div class="side-title"><h2>Upcoming Events</h2><button>View All</button></div>
+              <div class="event-list">
+                <div class="event-row"><span>F1</span><div><strong>Monaco Grand Prix</strong><span>F1 May 26, 3:00 PM</span></div><b>3 Days</b></div>
+                <div class="event-row"><span>NBA</span><div><strong>Celtics vs Pacers</strong><span>May 25, 8:00 PM</span></div><b>2 Days</b></div>
+              </div>
+            </section>
+          </aside>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

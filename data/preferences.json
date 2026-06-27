@@ -1,0 +1,13 @@
+{
+  "home_sports": [
+    "NFL",
+    "MLB",
+    "F1"
+  ],
+  "dashboard_modules": [
+    "today_summary",
+    "now_next",
+    "headlines",
+    "right_calendar"
+  ]
+}

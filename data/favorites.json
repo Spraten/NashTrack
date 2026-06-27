@@ -1,0 +1,14 @@
+{
+  "sports": [
+    "football"
+  ],
+  "leagues": [
+    "nfl"
+  ],
+  "resources": [
+    "Teams"
+  ],
+  "teams": [
+    "DAL - Dallas Cowboys"
+  ]
+}

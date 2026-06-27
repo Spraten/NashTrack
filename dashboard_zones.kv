@@ -1,0 +1,373 @@
+#:kivy 2.3.0
+#:import dp kivy.metrics.dp
+
+
+<ZoneDashboardScreen>:
+    orientation: "vertical"
+    padding: dp(3)
+    spacing: dp(3)
+    canvas.before:
+        Color:
+            rgba: 0.015, 0.025, 0.045, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    TopBar:
+        size_hint_y: None
+        height: dp(46)
+
+        Label:
+            text: "[b]NASH[color=3b82f6].[/color]TRACK[/b]"
+            markup: True
+            color: 0.98, 0.99, 1, 1
+            font_size: "20sp"
+            size_hint_x: 0.24
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
+        BoxLayout:
+            orientation: "vertical"
+            spacing: dp(1)
+
+            Label:
+                text: "[b]Good evening, Nash[/b]"
+                markup: True
+                color: 0.96, 0.98, 1, 1
+                font_size: "15sp"
+                size_hint_y: 0.56
+                halign: "left"
+                valign: "bottom"
+                text_size: self.size
+
+            Label:
+                id: focus_label
+                text: "All sports - 0 live, 0 upcoming"
+                color: 0.65, 0.70, 0.78, 1
+                font_size: "10sp"
+                size_hint_y: 0.44
+                halign: "left"
+                valign: "top"
+                text_size: self.size
+
+        Label:
+            id: last_updated
+            text: "Updated --"
+            color: 0.82, 0.88, 0.96, 1
+            font_size: "11sp"
+            size_hint_x: 0.22
+            halign: "right"
+            valign: "middle"
+            text_size: self.size
+
+        Label:
+            text: "LIVE"
+            color: 0.48, 0.88, 0.72, 1
+            bold: True
+            font_size: "14sp"
+            size_hint_x: 0.10
+            halign: "right"
+            valign: "middle"
+            text_size: self.size
+
+    BoxLayout:
+        orientation: "horizontal"
+        spacing: dp(3)
+
+        SideNav:
+            size_hint_x: None
+            width: dp(145)
+
+            NavButton:
+                text: "Dashboard"
+                active: root.active_view == "home" and root.active_sport == "all"
+                on_release: root.set_sport("all")
+
+            Widget:
+                size_hint_y: 0.04
+
+            NavButton:
+                text: "Calendar"
+                active: root.active_view == "calendar"
+                on_release: root.show_calendar()
+
+            NavButton:
+                text: "API Explorer"
+                active: root.active_view == "api"
+                on_release: root.show_api()
+
+            NavButton:
+                text: "Settings"
+                active: root.active_view == "settings"
+                on_release: root.show_settings()
+
+            Widget:
+
+            NavButton:
+                text: "Refresh"
+                on_release: root.refresh()
+
+            NavButton:
+                id: debug_nav_button
+                text: "Show Debug"
+                disabled: True
+                opacity: 0
+                height: 0
+                active: root.debug_open
+                on_release: root.toggle_debug()
+
+        MainContent:
+            BoxLayout:
+                id: home_zone
+                orientation: "horizontal"
+                spacing: dp(3)
+                opacity: 1 if root.active_view == "home" else 0
+                disabled: root.active_view != "home"
+                size_hint_y: 1 if root.active_view == "home" else None
+                height: 0 if root.active_view != "home" else dp(1)
+
+                BoxLayout:
+                    orientation: "vertical"
+                    spacing: dp(3)
+
+                    DashboardSection:
+                        id: now_next_zone
+                        title: "Now / Next"
+                        size_hint_y: 0.58 if root.is_dashboard_module_enabled("now_next", root.settings_version) else None
+                        height: 0 if not root.is_dashboard_module_enabled("now_next", root.settings_version) else dp(1)
+                        opacity: 1 if root.is_dashboard_module_enabled("now_next", root.settings_version) else 0
+                        disabled: not root.is_dashboard_module_enabled("now_next", root.settings_version)
+
+                        GridLayout:
+                            id: live_games
+                            cols: 1
+                            spacing: dp(4)
+
+                    DashboardSection:
+                        id: headlines_zone
+                        title: "Top Headlines"
+                        size_hint_y: 0.42 if root.is_dashboard_module_enabled("headlines", root.settings_version) else None
+                        height: 0 if not root.is_dashboard_module_enabled("headlines", root.settings_version) else dp(1)
+                        opacity: 1 if root.is_dashboard_module_enabled("headlines", root.settings_version) else 0
+                        disabled: not root.is_dashboard_module_enabled("headlines", root.settings_version)
+
+                        GridLayout:
+                            id: headline_cards
+                            cols: 1
+                            spacing: dp(4)
+
+                RightPanel:
+                    size_hint_x: None
+                    width: dp(320) if root.is_dashboard_module_enabled("today_summary", root.settings_version) or root.is_dashboard_module_enabled("right_calendar", root.settings_version) else 0
+                    opacity: 1 if root.is_dashboard_module_enabled("today_summary", root.settings_version) or root.is_dashboard_module_enabled("right_calendar", root.settings_version) else 0
+                    disabled: not (root.is_dashboard_module_enabled("today_summary", root.settings_version) or root.is_dashboard_module_enabled("right_calendar", root.settings_version))
+
+                    InfoBox:
+                        size_hint_y: None
+                        height: dp(78) if root.is_dashboard_module_enabled("today_summary", root.settings_version) else 0
+                        opacity: 1 if root.is_dashboard_module_enabled("today_summary", root.settings_version) else 0
+                        disabled: not root.is_dashboard_module_enabled("today_summary", root.settings_version)
+
+                        PanelTitle:
+                            text: "[b]Today[/b]"
+
+                        GridLayout:
+                            id: today_summary
+                            cols: 2
+                            spacing: dp(2)
+
+                    InfoBox:
+                        size_hint_y: 1 if root.is_dashboard_module_enabled("right_calendar", root.settings_version) else None
+                        height: 0 if not root.is_dashboard_module_enabled("right_calendar", root.settings_version) else dp(1)
+                        opacity: 1 if root.is_dashboard_module_enabled("right_calendar", root.settings_version) else 0
+                        disabled: not root.is_dashboard_module_enabled("right_calendar", root.settings_version)
+
+                        PanelTitle:
+                            text: "[b]Next 4 Weeks[/b]"
+
+                        GridLayout:
+                            id: sport_toggles
+                            cols: 3
+                            spacing: dp(2)
+                            size_hint_y: None
+                            height: 0
+                            opacity: 0
+                            disabled: True
+
+                        GridLayout:
+                            id: calendar_header
+                            cols: 7
+                            spacing: dp(2)
+                            size_hint_y: None
+                            height: dp(11)
+
+                        GridLayout:
+                            id: calendar_grid
+                            cols: 7
+                            spacing: dp(2)
+
+                        PanelBody:
+                            id: calendar_legend
+                            text: "Calendar feed will live here."
+                            size_hint_y: None
+                            height: dp(14)
+                            font_size: "9sp"
+                            halign: "center"
+                            valign: "middle"
+
+                    BoxLayout:
+                        size_hint_y: None
+                        height: 0
+                        opacity: 0
+                        disabled: True
+
+                        PanelBody:
+                            id: favorites_list
+                            text: "Loading favorites"
+
+                        BoxLayout:
+                            id: upcoming_events
+                            orientation: "vertical"
+
+                        LoadingSpinner:
+                            id: api_loading_spinner
+                            active: False
+
+                        PanelBody:
+                            id: api_status
+                            text: "Checking score feed"
+
+            BoxLayout:
+                orientation: "vertical"
+                spacing: dp(3)
+                opacity: 1 if root.active_view == "api" else 0
+                disabled: root.active_view != "api"
+                size_hint_y: 1 if root.active_view == "api" else None
+                height: 0 if root.active_view != "api" else dp(1)
+
+                DashboardSection:
+                    title: "API Explorer"
+                    size_hint_y: 0.45
+
+                    GridLayout:
+                        id: api_controls
+                        cols: 1
+                        spacing: dp(3)
+
+                DashboardSection:
+                    title: "Response Preview"
+                    size_hint_y: 0.55
+
+                    GridLayout:
+                        id: api_preview
+                        cols: 1
+                        spacing: dp(3)
+
+            DashboardSection:
+                title: "Calendar"
+                opacity: 1 if root.active_view == "calendar" else 0
+                disabled: root.active_view != "calendar"
+                size_hint_y: 1 if root.active_view == "calendar" else None
+                height: 0 if root.active_view != "calendar" else dp(1)
+
+                PanelBody:
+                    id: calendar_month_label
+                    text: ""
+                    size_hint_y: None
+                    height: dp(22)
+                    font_size: "15sp"
+                    bold: True
+                    color: 0.92, 0.96, 1, 1
+                    halign: "center"
+                    valign: "middle"
+
+                GridLayout:
+                    id: main_calendar_header
+                    cols: 7
+                    spacing: dp(2)
+                    size_hint_y: None
+                    height: dp(18)
+
+                GridLayout:
+                    id: main_calendar_grid
+                    cols: 7
+                    spacing: dp(2)
+
+                PanelBody:
+                    id: main_calendar_legend
+                    text: ""
+                    size_hint_y: None
+                    height: dp(18)
+                    font_size: "10sp"
+                    halign: "center"
+                    valign: "middle"
+
+            DashboardSection:
+                title: "Settings"
+                opacity: 1 if root.active_view == "settings" else 0
+                disabled: root.active_view != "settings"
+                size_hint_y: 1 if root.active_view == "settings" else None
+                height: 0 if root.active_view != "settings" else dp(1)
+
+                BoxLayout:
+                    id: settings_body
+                    orientation: "vertical"
+                    spacing: dp(6)
+
+                    PanelTitle:
+                        text: "[b]Sports Feeds[/b]"
+
+                    GridLayout:
+                        id: home_sports_settings
+                        cols: 2
+                        spacing: dp(6)
+                        size_hint_y: None
+                        height: dp(102)
+
+                    PanelTitle:
+                        text: "[b]Dashboard Modules[/b]"
+
+                    GridLayout:
+                        id: dashboard_modules_settings
+                        cols: 2
+                        spacing: dp(6)
+                        size_hint_y: None
+                        height: dp(68)
+
+                    Widget:
+
+            DashboardSection:
+                title: "Favorites"
+                opacity: 0
+                disabled: True
+                size_hint_y: None
+                height: 0
+
+                PanelBody:
+                    id: favorites_main
+                    text: "Loading favorites"
+
+            DashboardSection:
+                title: "Game Detail"
+                opacity: 1 if root.active_view == "game_detail" else 0
+                disabled: root.active_view != "game_detail"
+                size_hint_y: 1 if root.active_view == "game_detail" else None
+                height: 0 if root.active_view != "game_detail" else dp(1)
+
+                GridLayout:
+                    id: game_detail_body
+                    cols: 1
+                    spacing: dp(3)
+
+    BoxLayout:
+        id: debug_drawer
+        orientation: "vertical"
+        size_hint_y: None
+        height: 0
+        opacity: 0
+        disabled: True
+
+        BoxLayout:
+            id: debug_body
+            orientation: "vertical"
