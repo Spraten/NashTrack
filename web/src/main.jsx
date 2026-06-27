@@ -139,6 +139,8 @@ const WX_CODES = {
   80: ["Showers", "cloudRain"], 81: ["Showers", "cloudRain"], 82: ["Heavy Showers", "cloudRain"],
   95: ["Stormy", "zap"], 96: ["Stormy", "zap"], 99: ["Stormy", "zap"],
 };
+const DEFAULT_WEATHER_COORDS = { lat: 36.17, lon: -86.78 };
+const USE_BROWSER_WEATHER_LOCATION_KEY = "nash-use-browser-location";
 
 function wxInfo(code) {
   for (const [k, v] of Object.entries(WX_CODES)) {
@@ -151,15 +153,17 @@ function wxInfo(code) {
 
 async function fetchWeather() {
   try {
-    const coords = await new Promise((resolve) => {
-      if (!navigator.geolocation) return resolve(null);
-      navigator.geolocation.getCurrentPosition(
-        (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
-        () => resolve(null),
-        { timeout: 5000 }
-      );
-    });
-    const { lat, lon } = coords || { lat: 36.17, lon: -86.78 };
+    let coords = DEFAULT_WEATHER_COORDS;
+    if (localStorage.getItem(USE_BROWSER_WEATHER_LOCATION_KEY) === "true" && navigator.geolocation) {
+      coords = await new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
+          () => resolve(DEFAULT_WEATHER_COORDS),
+          { timeout: 5000 }
+        );
+      });
+    }
+    const { lat, lon } = coords;
     const res = await fetch(
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       `&current=temperature_2m,weather_code&temperature_unit=fahrenheit`
