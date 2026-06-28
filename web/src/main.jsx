@@ -218,6 +218,41 @@ function useCountdown(target) {
 
 // ─── Weather ─────────────────────────────────────────────────────────────────
 
+function useSwipeControls({ onLeft, onRight, threshold = 45 }) {
+  const startRef = useRef(null);
+  const swipedRef = useRef(false);
+
+  return {
+    onPointerDown: (event) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      startRef.current = { x: event.clientX, y: event.clientY };
+      swipedRef.current = false;
+    },
+    onPointerUp: (event) => {
+      const start = startRef.current;
+      if (!start) return;
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      startRef.current = null;
+      if (Math.abs(dx) < threshold || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+      swipedRef.current = true;
+      if (dx < 0) onLeft?.();
+      else onRight?.();
+      window.setTimeout(() => { swipedRef.current = false; }, 0);
+    },
+    onPointerCancel: () => {
+      startRef.current = null;
+      window.setTimeout(() => { swipedRef.current = false; }, 0);
+    },
+    onClickCapture: (event) => {
+      if (!swipedRef.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      swipedRef.current = false;
+    },
+  };
+}
+
 const WX_CODES = {
   0: ["Clear", "sun"],
   1: ["Mainly Clear", "cloudSun"], 2: ["Partly Cloudy", "cloudSun"], 3: ["Overcast", "cloud"],
@@ -1090,6 +1125,11 @@ function LiveScoreTicker({ games, title = "Live Scores", onSelectGame }) {
     return () => clearInterval(timer);
   }, [items.length]);
 
+  const swipeHandlers = useSwipeControls({
+    onLeft: () => items.length > 1 && setIndex((value) => (value + 1) % items.length),
+    onRight: () => items.length > 1 && setIndex((value) => (value - 1 + items.length) % items.length),
+  });
+
   if (!game) {
     return (
       <section className="panel live-score-ticker empty">
@@ -1105,6 +1145,7 @@ function LiveScoreTicker({ games, title = "Live Scores", onSelectGame }) {
     <section
       className={`panel live-score-ticker ${game.tone || ""}${onSelectGame ? " clickable" : ""}`}
       onClick={() => onSelectGame?.(game)}
+      {...swipeHandlers}
     >
       <div className="ticker-title">
         <h2>{title}</h2>
@@ -4457,6 +4498,7 @@ const GAMES_PAGE = 6;
 
 function GamesSection({ liveGames, recentGames, upcomingGames, loading, onSelectGame, activeTab, setActiveTab, lastUpdated }) {
   const [showAll, setShowAll] = useState(false);
+  const tabOrder = ["recent", "live", "soon"];
 
   const counts = {
     recent: recentGames.length,
@@ -4476,8 +4518,19 @@ function GamesSection({ liveGames, recentGames, upcomingGames, loading, onSelect
   // Reset showAll when tab changes
   React.useEffect(() => { setShowAll(false); }, [activeTab]);
 
+  const swipeHandlers = useSwipeControls({
+    onLeft: () => {
+      const index = tabOrder.indexOf(activeTab);
+      setActiveTab(tabOrder[(index + 1 + tabOrder.length) % tabOrder.length]);
+    },
+    onRight: () => {
+      const index = tabOrder.indexOf(activeTab);
+      setActiveTab(tabOrder[(index - 1 + tabOrder.length) % tabOrder.length]);
+    },
+  });
+
   return (
-    <section className="panel">
+    <section className="panel swipe-panel" {...swipeHandlers}>
       <div className="section-title">
         <TabBar active={activeTab} onChange={setActiveTab} counts={counts} />
         {hasMore && !loading && (
@@ -4951,8 +5004,14 @@ function Header({ weather }) {
 
 function CalendarPanel({ googleEvents, connected, sportsGames }) {
   const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
+  const [monthOffset, setMonthOffset] = useState(0);
+  const visibleMonth = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+  const year = visibleMonth.getFullYear();
+  const month = visibleMonth.getMonth();
+  const swipeHandlers = useSwipeControls({
+    onLeft: () => setMonthOffset((value) => value + 1),
+    onRight: () => setMonthOffset((value) => value - 1),
+  });
 
   // Build Monday-first grid
   const firstDay = new Date(year, month, 1);
@@ -4985,14 +5044,14 @@ function CalendarPanel({ googleEvents, connected, sportsGames }) {
     if (d.getFullYear() === year && d.getMonth() === month) gcalDays.add(d.getDate());
   });
 
-  const todayNum = today.getDate();
-  const monthLabel = today.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const todayNum = today.getFullYear() === year && today.getMonth() === month ? today.getDate() : -1;
+  const monthLabel = visibleMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const upcomingGcal = googleEvents
     .filter((ev) => new Date(ev.start.dateTime || ev.start.date) >= today)
     .slice(0, 4);
 
   return (
-    <section className="panel side-card calendar-panel">
+    <section className="panel side-card calendar-panel swipe-panel" {...swipeHandlers}>
       <div className="side-title"><h2>Calendar</h2><span className="cal-month">{monthLabel}</span></div>
       <div className="weekday-row">
         {["Mo","Tu","We","Th","Fr","Sa","Su"].map((d) => <span key={d}>{d}</span>)}
@@ -5153,8 +5212,13 @@ function HeadlinesRail({ articles, cycling = true }) {
     return () => clearInterval(timer);
   }, [cycling, items.length]);
 
+  const swipeHandlers = useSwipeControls({
+    onLeft: () => items.length > 1 && setIndex((value) => (value + 1) % items.length),
+    onRight: () => items.length > 1 && setIndex((value) => (value - 1 + items.length) % items.length),
+  });
+
   return (
-    <section className="panel side-card headlines-rail">
+    <section className="panel side-card headlines-rail swipe-panel" {...swipeHandlers}>
       <div className="side-title">
         <h2>Headlines</h2>
         <span>{items.length ? `${(index % items.length) + 1}/${items.length}` : "Standby"}</span>
@@ -5496,6 +5560,11 @@ function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh, se
             title="All Sports Live"
             onSelectGame={setSelectedGame}
           />
+          <CalendarPanel
+            googleEvents={googleEvents}
+            connected={googleConnected}
+            sportsGames={[...liveGames, ...upcomingGames, ...recentGames]}
+          />
           <GamesSection
             liveGames={liveGames}
             recentGames={recentGames}
@@ -5505,11 +5574,6 @@ function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh, se
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             lastUpdated={lastUpdated}
-          />
-          <CalendarPanel
-            googleEvents={googleEvents}
-            connected={googleConnected}
-            sportsGames={[...liveGames, ...upcomingGames, ...recentGames]}
           />
         </div>
 

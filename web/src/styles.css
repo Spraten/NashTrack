@@ -310,7 +310,7 @@ button {
 }
 
 .primary-column {
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
   align-content: start;
 }
 
@@ -323,6 +323,14 @@ button {
   border-radius: 10px;
   padding: 10px;
   background: rgba(9, 18, 31, 0.78);
+}
+
+.swipe-panel,
+.live-score-ticker,
+.headlines-rail,
+.calendar-panel {
+  touch-action: pan-y;
+  user-select: none;
 }
 
 .section-title,
