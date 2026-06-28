@@ -22,7 +22,7 @@ Goal: rebuild the Football tab into an NFL command center that feels useful on g
   - Game cards with score, quarter, clock, possession, down/distance, yard line, and last play.
   - Alert rail for touchdowns, turnovers, red-zone trips, final scores, and favorite-team moments.
 
-- [ ] **Game Center**
+- [x] **Game Center**
   - Tap any NFL game to open a focused matchup view.
   - Pregame state: odds, venue, broadcast, team leaders, injury watch, and preview article.
   - Live/post state: drive chart, recent plays, scoring summary, win probability, leaders, box score, and recap/highlights when available.
@@ -63,7 +63,7 @@ Goal: rebuild the Football tab into an NFL command center that feels useful on g
 ### NFL Implementation Plan
 
 - [x] Phase 1: build the RedZone Live command view for the Football tab.
-- [ ] Phase 2: reuse and expand the existing game detail modal into an NFL Game Center.
+- [x] Phase 2: reuse and expand the existing game detail modal into an NFL Game Center.
 - [x] Phase 3: add Injuries, Players, Teams, News, and Standings segmented panels.
 - [x] Phase 4: add favorite-team priority sorting and alert logic.
 - [ ] Phase 5: verify the full NFL flow on the Raspberry Pi at 800x480.
@@ -71,6 +71,8 @@ Goal: rebuild the Football tab into an NFL command center that feels useful on g
 First pass added: Football tab command view, urgency-sorted slate, red-zone/one-score/favorite alerts, selected-game panels for Game, Players, Injuries, Teams, and News, and adaptive refresh timing.
 
 Second pass added: league-wide ESPN injury board with filters, AFC/NFC playoff standings, division rows, selected-matchup season team stats, and selected-matchup roster support.
+
+Third pass added: redesigned full-game popup as a compact Game Center with matchup header, linescore, game info, odds, live situation, scoring summary, drive chart, team stats, leaders, injuries, football box score groups, article/recap, and highlights when ESPN returns them.
 
 ### NFL Data Notes
 

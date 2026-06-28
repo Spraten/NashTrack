@@ -323,8 +323,35 @@ async function fetchGameDetail(sport, league, eventId) {
       homeScore: str(p.homeScore),
     }));
 
+    const scoringPlays = (Array.isArray(data.scoringPlays) ? data.scoringPlays : []).map((p) => ({
+      text: str(p.text),
+      team: str(p.team?.abbreviation),
+      type: str(p.type?.abbreviation || p.type?.text),
+      clock: str(p.clock?.displayValue),
+      period: p.period?.number || 0,
+      awayScore: str(p.awayScore),
+      homeScore: str(p.homeScore),
+    }));
+
+    const driveRows = [
+      ...(data.drives?.current ? [data.drives.current] : []),
+      ...(Array.isArray(data.drives?.previous) ? data.drives.previous : []),
+    ].filter(Boolean);
+    const drives = driveRows.slice(-10).reverse().map((drive) => ({
+      team: str(drive.team?.abbreviation),
+      description: str(drive.description),
+      result: str(drive.shortDisplayResult || drive.displayResult || drive.result),
+      start: str(drive.start?.text),
+      end: str(drive.end?.text),
+      isScore: !!drive.isScore,
+      plays: drive.offensivePlays ?? "",
+      yards: drive.yards ?? "",
+      time: str(drive.timeElapsed?.displayValue),
+    }));
+
     // Box score players (keyed MIN/PTS/REB/AST/FG/+/- by column label)
     const boxPlayers = [];
+    const boxGroups = {};
     (data.boxscore?.players || []).forEach((teamPlayers) => {
       const teamAbbr = str(teamPlayers.team?.abbreviation);
       const stats0 = (teamPlayers.statistics || [])[0] || {};
@@ -345,6 +372,18 @@ async function fetchGameDetail(sport, league, eventId) {
           fg:  get("FG", s),
           pm:  get("+/-", s),
         });
+      });
+
+      (teamPlayers.statistics || []).forEach((group) => {
+        const groupName = str(group.name);
+        const groupLabels = (group.labels || group.names || []).map(str);
+        const athletes = (group.athletes || []).filter((a) => !a.didNotPlay).map((a) => ({
+          name: str(a.athlete?.shortName || a.athlete?.displayName),
+          stats: (a.stats || []).map(str),
+        })).filter((a) => a.name);
+        if (!teamAbbr || !groupName || !athletes.length) return;
+        if (!boxGroups[groupName]) boxGroups[groupName] = { name: groupName, labels: groupLabels, teams: {} };
+        boxGroups[groupName].teams[teamAbbr] = athletes;
       });
     });
 
@@ -392,6 +431,13 @@ async function fetchGameDetail(sport, league, eventId) {
       url: str(v.links?.source?.full?.href || v.links?.web?.href || v.links?.source?.href),
     })).filter((v) => v.thumbnail);
 
+    const linescore = {};
+    (comp.competitors || []).forEach((competitor) => {
+      const abbr = str(competitor.team?.abbreviation);
+      if (!abbr) return;
+      linescore[abbr] = (competitor.linescores || []).map((line) => str(line.displayValue ?? line.value));
+    });
+
     return {
       venue: str(venue.fullName),
       city: [addr.city, addr.state].filter(Boolean).map(str).join(", "),
@@ -407,8 +453,12 @@ async function fetchGameDetail(sport, league, eventId) {
       teamColors,
       winProb,
       plays,
+      scoringPlays,
+      drives,
       boxPlayers,
+      boxGroups: Object.values(boxGroups),
       teamStats,
+      linescore,
       predictor,
       article,
       videos,
@@ -2554,7 +2604,7 @@ function NFLCommandView({ onUpdated, onNextRefresh }) {
     <>
       {modalGame && (
         <ModalErrorBoundary onClose={() => setModalGame(null)}>
-          <GameDetailModal game={modalGame} onClose={() => setModalGame(null)} />
+          <GameCenterModal game={modalGame} onClose={() => setModalGame(null)} />
         </ModalErrorBoundary>
       )}
       <main className="nfl-view">
@@ -3192,6 +3242,497 @@ function BoxScoreTab({ players, awayAbbr, homeAbbr, toneColor, loading }) {
 }
 
 // ─── Game detail modal ────────────────────────────────────────────────────────
+
+function GameCenterEmpty({ children }) {
+  return <p className="gc-empty">{children}</p>;
+}
+
+function GameCenterInfo({ game, detail }) {
+  const rows = [
+    detail?.venue ? { icon: "mapPin", label: detail.city ? `${detail.venue} - ${detail.city}` : detail.venue } : null,
+    detail?.broadcast ? { icon: "tv", label: detail.broadcast } : null,
+    !detail?.venue && game.date ? { icon: "calendar", label: formatGameTime(game.date) } : null,
+  ].filter(Boolean);
+  if (!rows.length) return null;
+  return (
+    <div className="gc-info-list">
+      {rows.map((row, index) => (
+        <div className="gc-info-row" key={index}>
+          <Icon name={row.icon} size={13} />
+          <span>{row.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GameCenterOdds({ detail, game }) {
+  if (!detail || !(detail.spread || detail.overUnder || detail.awayML || detail.homeML)) return null;
+  return (
+    <div className="gc-odds-grid">
+      {detail.spread && <div><span>Spread</span><b>{detail.spread}</b></div>}
+      {detail.overUnder && <div><span>O/U</span><b>{detail.overUnder}</b></div>}
+      {detail.awayML && <div><span>{game.away} ML</span><b>{detail.awayML}</b></div>}
+      {detail.homeML && <div><span>{game.home} ML</span><b>{detail.homeML}</b></div>}
+    </div>
+  );
+}
+
+function GameCenterSituation({ game, detail, toneColor }) {
+  const liveLabel = game.leagueShort === "NFL" ? nflSituationLabel(game) : game.status;
+  const label = game.isLive ? liveLabel : game.state === "post" ? "Final" : formatCountdown(game.date);
+  return (
+    <div className="gc-card gc-situation-card">
+      <span className="gc-card-label">{game.isLive ? "Live Situation" : game.state === "post" ? "Result" : "Next Kick"}</span>
+      <strong>{label || game.status}</strong>
+      <em>{game.isLive ? game.status : formatGameTime(game.date)}</em>
+      {detail?.winProb && (
+        <WinProbBar
+          away={detail.winProb.away}
+          home={detail.winProb.home}
+          awayAbbr={game.away}
+          homeAbbr={game.home}
+          toneColor={toneColor}
+        />
+      )}
+      {!detail?.winProb && detail?.predictor && (
+        <WinProbBar
+          away={detail.predictor.away}
+          home={detail.predictor.home}
+          awayAbbr={game.away}
+          homeAbbr={game.home}
+          toneColor={toneColor}
+        />
+      )}
+    </div>
+  );
+}
+
+function GameCenterLineScore({ game, detail }) {
+  const away = detail?.linescore?.[game.away] || [];
+  const home = detail?.linescore?.[game.home] || [];
+  const length = Math.max(away.length, home.length);
+  if (!length) return <div className="gc-linescore empty" />;
+  return (
+    <div className="gc-linescore">
+      <div className="gc-line-row gc-line-head">
+        <span />
+        {[...Array(length)].map((_, index) => <b key={index}>{index < 4 ? index + 1 : "OT"}</b>)}
+        <b>T</b>
+      </div>
+      {[{ abbr: game.away, score: game.awayScore, vals: away }, { abbr: game.home, score: game.homeScore, vals: home }].map((team) => (
+        <div className="gc-line-row" key={team.abbr}>
+          <strong>{team.abbr}</strong>
+          {[...Array(length)].map((_, index) => <span key={index}>{team.vals[index] || "-"}</span>)}
+          <b>{team.score}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GameCenterTeamStats({ game, detail, toneColor }) {
+  if (!detail?.teamStats || !game) return null;
+  const rows = game.leagueShort === "NFL" ? nflTeamStatRows(detail, game) : [];
+
+  if (!rows.length) {
+    return <TeamStatsRow awayAbbr={game.away} homeAbbr={game.home} teamStats={detail.teamStats} toneColor={toneColor} />;
+  }
+
+  return (
+    <div className="gc-card">
+      <div className="gc-section-head">
+        <span>{game.away}</span>
+        <b>Team Stats</b>
+        <span>{game.home}</span>
+      </div>
+      <div className="gc-stat-table">
+        {rows.map((row) => (
+          <div className="gc-stat-row" key={row.key}>
+            <strong>{row.away || "-"}</strong>
+            <span>{row.label}</span>
+            <strong>{row.home || "-"}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GameCenterScoring({ scoringPlays }) {
+  if (!scoringPlays?.length) return <GameCenterEmpty>No scoring summary available yet</GameCenterEmpty>;
+  return (
+    <div className="gc-scoring-list">
+      {scoringPlays.slice(-8).reverse().map((play, index) => (
+        <div className="gc-scoring-row" key={index}>
+          <span>{play.period ? `Q${play.period}` : "--"} {play.clock || ""}</span>
+          <strong>{play.team || "--"}</strong>
+          <p>{play.text}</p>
+          <b>{play.awayScore}-{play.homeScore}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GameCenterDrives({ drives }) {
+  if (!drives?.length) return <GameCenterEmpty>Drive chart unavailable</GameCenterEmpty>;
+  return (
+    <div className="gc-drive-list">
+      {drives.slice(0, 8).map((drive, index) => (
+        <div className={`gc-drive-row${drive.isScore ? " scoring" : ""}`} key={index}>
+          <span>{drive.team || "--"}</span>
+          <strong>{drive.result || "--"}</strong>
+          <p>{drive.description || `${drive.plays || "-"} plays, ${drive.yards || "-"} yards`}</p>
+          <em>{[drive.start, drive.end].filter(Boolean).join(" -> ")}</em>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GameCenterLeaders({ leaders, toneColor }) {
+  if (!leaders?.length) return <GameCenterEmpty>Leaders unavailable</GameCenterEmpty>;
+  return (
+    <div className="gc-leader-list">
+      {leaders.slice(0, 6).map((leader, index) => (
+        <div className="gc-leader-row" key={index}>
+          <b style={{ color: toneColor }}>{leader.stat}</b>
+          <strong>{leader.name}</strong>
+          <span>{leader.category}{leader.team ? ` - ${leader.team}` : ""}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GameCenterInjuries({ injuries }) {
+  if (!injuries?.length) return <GameCenterEmpty>No injury report available</GameCenterEmpty>;
+  return (
+    <div className="gc-injury-list">
+      {injuries.slice(0, 8).map((injury, index) => (
+        <div className="gc-injury-row" key={index}>
+          <span>{injury.team}</span>
+          <strong>{injury.name}</strong>
+          <em>{injury.pos || "--"}</em>
+          <b>{injury.status || injury.type || "Listed"}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GameCenterFootballBox({ detail, game, toneColor, loading }) {
+  const [side, setSide] = useState("away");
+  const [groupName, setGroupName] = useState("passing");
+  const groups = detail?.boxGroups || [];
+  const preferredGroups = ["passing", "rushing", "receiving", "defensive", "kicking"];
+  const available = preferredGroups
+    .map((name) => groups.find((group) => group.name === name))
+    .filter(Boolean);
+  const group = available.find((item) => item.name === groupName) || available[0] || groups[0];
+  const abbr = side === "away" ? game.away : game.home;
+  const rows = group?.teams?.[abbr] || [];
+  const labels = group?.labels || [];
+
+  useEffect(() => {
+    if (group && group.name !== groupName && !available.some((item) => item.name === groupName)) {
+      setGroupName(group.name);
+    }
+  }, [group?.name, groupName, available.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading && !detail) return (
+    <div className="plays-loading">
+      {[...Array(6)].map((_, index) => <div className="loading-pulse" style={{ height: 28 }} key={index} />)}
+    </div>
+  );
+  if (!group || !rows.length) {
+    return <BoxScoreTab players={detail?.boxPlayers || []} awayAbbr={game.away} homeAbbr={game.home} toneColor={toneColor} loading={loading && !detail} />;
+  }
+
+  return (
+    <div className="gc-football-box">
+      <div className="gc-box-controls">
+        <div className="gc-mini-tabs">
+          <button className={side === "away" ? "active" : ""} onClick={() => setSide("away")}>{game.away}</button>
+          <button className={side === "home" ? "active" : ""} onClick={() => setSide("home")}>{game.home}</button>
+        </div>
+        <div className="gc-group-tabs">
+          {available.map((item) => (
+            <button key={item.name} className={group.name === item.name ? "active" : ""} onClick={() => setGroupName(item.name)}>
+              {item.name === "defensive" ? "Defense" : item.name}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="gc-football-table">
+        <div className="gc-football-row header">
+          <span>Player</span>
+          {labels.slice(0, 6).map((label) => <b key={label}>{label}</b>)}
+        </div>
+        {rows.slice(0, 9).map((player, index) => (
+          <div className="gc-football-row" key={`${player.name}-${index}`}>
+            <strong>{player.name}</strong>
+            {labels.slice(0, 6).map((label, statIndex) => (
+              <span key={label}>{player.stats[statIndex] || "-"}</span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GameCenterStory({ detail }) {
+  if (!detail?.article && !detail?.videos?.length) return <GameCenterEmpty>No preview or recap returned yet</GameCenterEmpty>;
+  return (
+    <div className="gc-story">
+      {detail?.article && (
+        <article className="gc-card gc-article">
+          <strong>{detail.article.headline}</strong>
+          <p>{detail.article.story}</p>
+        </article>
+      )}
+      {!!detail?.videos?.length && (
+        <div className="gc-video-grid">
+          {detail.videos.map((video, index) => (
+            <button className="gc-video-card" key={index} onClick={() => video.url && window.open(video.url, "_blank")}>
+              <img src={video.thumbnail} alt="" />
+              <span>{video.headline}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GameCenterModal({ game, onClose }) {
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailUpdatedAt, setDetailUpdatedAt] = useState(null);
+  const [section, setSection] = useState("overview");
+  const isF1 = game.leagueShort === "F1";
+  const isNFL = game.leagueShort === "NFL";
+  const isLive = game.isLive;
+  const isPost = game.state === "post";
+  const isPre = game.state === "pre";
+  const toneColor = {
+    orange: "var(--orange)", red: "var(--red)", green: "var(--green)", blue: "#58a6ff",
+  }[game.tone] || "var(--blue)";
+
+  useEffect(() => {
+    setSection("overview");
+  }, [game.id]);
+
+  useEffect(() => {
+    if (isF1 || !game.sport) return undefined;
+    let cancelled = false;
+    function doFetch() {
+      setDetailLoading(true);
+      fetchGameDetail(game.sport, game.league, game.id)
+        .then((nextDetail) => {
+          if (!cancelled) {
+            setDetail(nextDetail);
+            setDetailUpdatedAt(new Date());
+          }
+        })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setDetailLoading(false); });
+    }
+    doFetch();
+    const timerId = isLive ? setInterval(doFetch, 30_000) : null;
+    return () => {
+      cancelled = true;
+      if (timerId) clearInterval(timerId);
+    };
+  }, [game.id, game.state, game.isLive, game.sport, game.league, isF1, isLive]);
+
+  useEffect(() => {
+    function onKey(event) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  function handleBackdrop(event) {
+    if (event.target === event.currentTarget) onClose();
+  }
+
+  const tabs = [
+    { key: "overview", label: isPre ? "Matchup" : "Game" },
+    { key: "plays", label: isNFL ? "Drives" : "Plays" },
+    { key: "box", label: isNFL ? "Box" : "Stats" },
+    { key: "story", label: isPost ? "Recap" : "Story" },
+  ];
+
+  return (
+    <div className="modal-overlay" onClick={handleBackdrop}>
+      <div className="modal-panel gamecenter-modal" style={{ "--modal-tone": toneColor }}>
+        <header className="gc-topbar">
+          <div className="gc-title-block">
+            <span className="gc-league" style={{ color: toneColor }}>{game.leagueShort}</span>
+            <strong>{isF1 ? game.meetingName || "Formula 1" : `${game.away} @ ${game.home}`}</strong>
+            <em>{isLive ? "Live" : isPost ? "Final" : formatGameTime(game.date)}</em>
+          </div>
+          <button className="modal-close" onClick={onClose}><Icon name="x" size={18} /></button>
+        </header>
+
+        {isF1 ? (
+          <section className="gc-f1-panel">
+            <span className="gc-card-label">Session</span>
+            <strong>{game.home}</strong>
+            {game.location && <p>{game.location}</p>}
+            <div className="gc-f1-time">
+              <span>{formatGameTime(game.date)}</span>
+              {isPre && <b style={{ color: toneColor }}>{formatCountdown(game.date)}</b>}
+              {isLive && <b className="live-text">In progress</b>}
+            </div>
+          </section>
+        ) : (
+          <>
+            <section className="gc-scoreboard">
+              <div className="gc-team">
+                <TeamMark label={game.away} logo={game.awayLogo} tone={game.tone} size="lg" />
+                <strong>{game.away}</strong>
+                <span>{game.awayRecord || game.awayFull || "Away"}</span>
+              </div>
+              <div className="gc-score-center">
+                {(isLive || isPost) ? (
+                  <>
+                    <div className="gc-score-row">
+                      <b className={game.awayWinning ? "winning" : ""}>{game.awayScore}</b>
+                      <span>-</span>
+                      <b className={game.homeWinning ? "winning" : ""}>{game.homeScore}</b>
+                    </div>
+                    <em>{game.status}</em>
+                  </>
+                ) : (
+                  <>
+                    <div className="gc-vs">VS</div>
+                    <em>{formatCountdown(game.date)}</em>
+                  </>
+                )}
+                {isNFL && game.situation && <small>{nflSituationLabel(game)}</small>}
+              </div>
+              <div className="gc-team home">
+                <TeamMark label={game.home} logo={game.homeLogo} tone={game.tone} size="lg" />
+                <strong>{game.home}</strong>
+                <span>{game.homeRecord || game.homeFull || "Home"}</span>
+              </div>
+            </section>
+
+            <GameCenterLineScore game={game} detail={detail} />
+
+            <nav className="gc-tabs">
+              {tabs.map((tab) => (
+                <button key={tab.key} className={section === tab.key ? "active" : ""} onClick={() => setSection(tab.key)}>
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+
+            <section className="gc-content">
+              {detailLoading && !detail && (
+                <div className="gc-loading-grid">
+                  {[...Array(4)].map((_, index) => <div className="loading-pulse" key={index} />)}
+                </div>
+              )}
+
+              {section === "overview" && (
+                <div className="gc-overview-grid">
+                  <div className="gc-main-stack">
+                    <GameCenterSituation game={game} detail={detail} toneColor={toneColor} />
+                    <div className="gc-card">
+                      <span className="gc-card-label">Game Info</span>
+                      <GameCenterInfo game={game} detail={detail} />
+                      <GameCenterOdds detail={detail} game={game} />
+                    </div>
+                    {!!detail?.scoringPlays?.length && (
+                      <div className="gc-card">
+                        <div className="gc-section-title">Scoring Summary</div>
+                        <GameCenterScoring scoringPlays={detail.scoringPlays} />
+                      </div>
+                    )}
+                    <GameCenterTeamStats game={game} detail={detail} toneColor={toneColor} />
+                  </div>
+                  <div className="gc-side-stack">
+                    <div className="gc-card">
+                      <div className="gc-section-title">Top Performers</div>
+                      <GameCenterLeaders leaders={detail?.leaders || []} toneColor={toneColor} />
+                    </div>
+                    <div className="gc-card">
+                      <div className="gc-section-title">Injury Watch</div>
+                      <GameCenterInjuries injuries={detail?.injuries || []} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {section === "plays" && (
+                <div className="gc-play-grid">
+                  {isNFL ? (
+                    <>
+                      <div className="gc-card">
+                        <div className="gc-section-title">Drive Chart</div>
+                        <GameCenterDrives drives={detail?.drives || []} />
+                      </div>
+                      <div className="gc-card">
+                        <div className="gc-section-title">Scoring Plays</div>
+                        <GameCenterScoring scoringPlays={detail?.scoringPlays || []} />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="gc-card span-2">
+                      <PlaysTab
+                        plays={detail?.plays || []}
+                        loading={detailLoading && !detail}
+                        earlyGame={!!detail && !detail.plays?.length}
+                        updatedAt={detailUpdatedAt}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {section === "box" && (
+                <div className="gc-box-grid">
+                  <div className="gc-card span-2">
+                    {isNFL ? (
+                      <GameCenterFootballBox detail={detail} game={game} toneColor={toneColor} loading={detailLoading} />
+                    ) : (
+                      <BoxScoreTab
+                        players={detail?.boxPlayers || []}
+                        awayAbbr={game.away}
+                        homeAbbr={game.home}
+                        toneColor={toneColor}
+                        loading={detailLoading && !detail}
+                      />
+                    )}
+                  </div>
+                  <GameCenterTeamStats game={game} detail={detail} toneColor={toneColor} />
+                </div>
+              )}
+
+              {section === "story" && <GameCenterStory detail={detail} />}
+            </section>
+          </>
+        )}
+
+        <footer className="gc-actions">
+          <span>{detailUpdatedAt ? `Updated ${detailUpdatedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : "ESPN detail feed"}</span>
+          {!isF1 && (
+            <button className="modal-btn" onClick={() => window.open(espnGameUrl(game), "_blank")}>
+              <Icon name="link" size={14} /> ESPN
+            </button>
+          )}
+          <button className="modal-btn primary" onClick={onClose}>Close</button>
+        </footer>
+      </div>
+    </div>
+  );
+}
 
 function GameDetailModal({ game, onClose }) {
   const [detail, setDetail] = useState(null);
@@ -4254,7 +4795,7 @@ function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh }) 
     <>
       {selectedGame && (
         <ModalErrorBoundary onClose={() => setSelectedGame(null)}>
-          <GameDetailModal game={selectedGame} onClose={() => setSelectedGame(null)} />
+          <GameCenterModal game={selectedGame} onClose={() => setSelectedGame(null)} />
         </ModalErrorBoundary>
       )}
       <main className="dashboard">
