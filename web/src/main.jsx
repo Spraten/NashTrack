@@ -84,6 +84,86 @@ function Icon({ name, size = 20, filled = false }) {
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
+const NASH_SETTINGS_KEY = "nash-settings";
+const DISPLAY_SERVICE_URL = "http://127.0.0.1:5183";
+const DEFAULT_SCREEN_MODE = "alwaysOn";
+const SCREEN_SLEEP_MODE = "sleep3";
+const SCREEN_SLEEP_MS = 3 * 60_000;
+
+function loadNashSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(NASH_SETTINGS_KEY) || "{}");
+    return { screenMode: DEFAULT_SCREEN_MODE, ...saved };
+  } catch {
+    return { screenMode: DEFAULT_SCREEN_MODE };
+  }
+}
+
+async function postDisplayService(path, payload) {
+  const response = await fetch(`${DISPLAY_SERVICE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.message || `Display service failed with HTTP ${response.status}`);
+  }
+  return data;
+}
+
+function useScreenSleepMode(screenMode) {
+  const timerRef = useRef(null);
+  const sleepingRef = useRef(false);
+
+  useEffect(() => {
+    const clearSleepTimer = () => {
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+
+    const power = (state) => {
+      postDisplayService("/display/power", { state }).catch(() => {});
+    };
+
+    if (screenMode !== SCREEN_SLEEP_MODE) {
+      clearSleepTimer();
+      if (sleepingRef.current) {
+        sleepingRef.current = false;
+        power("on");
+      }
+      return clearSleepTimer;
+    }
+
+    const armSleepTimer = () => {
+      clearSleepTimer();
+      timerRef.current = window.setTimeout(() => {
+        sleepingRef.current = true;
+        power("off");
+      }, SCREEN_SLEEP_MS);
+    };
+
+    const wakeAndReset = () => {
+      if (sleepingRef.current) {
+        sleepingRef.current = false;
+        power("on");
+      }
+      armSleepTimer();
+    };
+
+    const events = ["pointerdown", "keydown", "touchstart", "wheel"];
+    events.forEach((eventName) => window.addEventListener(eventName, wakeAndReset, { passive: true }));
+    armSleepTimer();
+
+    return () => {
+      clearSleepTimer();
+      events.forEach((eventName) => window.removeEventListener(eventName, wakeAndReset));
+    };
+  }, [screenMode]);
+}
+
 function useClock() {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -4266,7 +4346,9 @@ function GamesSection({ liveGames, recentGames, upcomingGames, loading, onSelect
 function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
   const [clientId, setClientId] = useState(settings.googleClientId || "");
   const [updateStatus, setUpdateStatus] = useState({ state: "idle", message: "", output: "" });
+  const [displayStatus, setDisplayStatus] = useState({ state: "idle", message: "", output: "" });
   const connected = !!settings.googleToken;
+  const screenMode = settings.screenMode === SCREEN_SLEEP_MODE ? SCREEN_SLEEP_MODE : DEFAULT_SCREEN_MODE;
 
   useEffect(() => {
     function onKey(e) { if (e.key === "Escape") onClose(); }
@@ -4297,6 +4379,31 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
       setUpdateStatus({
         state: "error",
         message: "Updater is not available. Start Nash Track with main.py, then try again.",
+        output: String(error.message || error),
+      });
+    }
+  }
+
+  async function handleScreenMode(mode) {
+    const next = { ...settings, screenMode: mode };
+    onSave(next);
+    setDisplayStatus({
+      state: "running",
+      message: mode === SCREEN_SLEEP_MODE ? "Enabling 3 minute sleep..." : "Switching to always on...",
+      output: "",
+    });
+
+    try {
+      const payload = await postDisplayService("/display", { mode });
+      setDisplayStatus({
+        state: payload.warning ? "warning" : "success",
+        message: payload.warning || payload.message || "Display setting applied.",
+        output: payload.command ? `Used ${payload.command}` : "",
+      });
+    } catch (error) {
+      setDisplayStatus({
+        state: "warning",
+        message: "Saved locally. Display control is available when Nash Track is running from main.py on the Pi.",
         output: String(error.message || error),
       });
     }
@@ -4393,6 +4500,45 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
             <div className={`settings-update-status ${updateStatus.state}`}>
               <strong>{updateStatus.message}</strong>
               {updateStatus.output && <pre>{updateStatus.output}</pre>}
+            </div>
+          )}
+        </div>
+
+        <p className="settings-section-label">Display</p>
+
+        <div className="settings-service-card">
+          <div className="settings-service-header">
+            <span className="settings-service-icon settings-service-icon-box">LCD</span>
+            <div className="settings-service-info">
+              <strong>Screen Mode</strong>
+              <span className={screenMode === SCREEN_SLEEP_MODE ? "connected-text" : "muted-text"}>
+                {screenMode === SCREEN_SLEEP_MODE ? "Sleep after 3 minutes" : "Always on"}
+              </span>
+            </div>
+            <div className="settings-mode-toggle" role="group" aria-label="Screen mode">
+              <button
+                className={`settings-mode-btn ${screenMode === DEFAULT_SCREEN_MODE ? "active" : ""}`}
+                disabled={displayStatus.state === "running"}
+                onClick={() => handleScreenMode(DEFAULT_SCREEN_MODE)}
+              >
+                Always on
+              </button>
+              <button
+                className={`settings-mode-btn ${screenMode === SCREEN_SLEEP_MODE ? "active" : ""}`}
+                disabled={displayStatus.state === "running"}
+                onClick={() => handleScreenMode(SCREEN_SLEEP_MODE)}
+              >
+                Sleep 3 min
+              </button>
+            </div>
+          </div>
+          <p className="settings-display-note">
+            Sleep mode turns the Pi display off after 3 minutes without touch input; tap the screen to wake it.
+          </p>
+          {displayStatus.message && (
+            <div className={`settings-update-status ${displayStatus.state}`}>
+              <strong>{displayStatus.message}</strong>
+              {displayStatus.output && <pre>{displayStatus.output}</pre>}
             </div>
           )}
         </div>
@@ -4835,10 +4981,7 @@ function App() {
   const [nextRefresh,  setNextRefresh]  = useState(null);
   const [activeView,   setActiveView]   = useState(() => viewFromHash());
   const [showSettings, setShowSettings] = useState(false);
-  const [settings,     setSettings]     = useState(() => {
-    try { return JSON.parse(localStorage.getItem("nash-settings") || "{}"); }
-    catch { return {}; }
-  });
+  const [settings,     setSettings]     = useState(loadNashSettings);
   const [googleToken,  setGoogleToken]  = useState(() => sessionStorage.getItem("gtoken") || null);
   const [calEvents,    setCalEvents]    = useState([]);
 
@@ -4862,7 +5005,7 @@ function App() {
     setGoogleToken(token);
     const next = { ...settings, googleToken: true };
     setSettings(next);
-    localStorage.setItem("nash-settings", JSON.stringify(next));
+    localStorage.setItem(NASH_SETTINGS_KEY, JSON.stringify(next));
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -4877,7 +5020,7 @@ function App() {
         setCalEvents([]);
         const next = { ...settings, googleToken: false };
         setSettings(next);
-        localStorage.setItem("nash-settings", JSON.stringify(next));
+        localStorage.setItem(NASH_SETTINGS_KEY, JSON.stringify(next));
       } else {
         setCalEvents(events);
       }
@@ -4886,7 +5029,7 @@ function App() {
 
   function saveSettings(next) {
     setSettings(next);
-    localStorage.setItem("nash-settings", JSON.stringify(next));
+    localStorage.setItem(NASH_SETTINGS_KEY, JSON.stringify(next));
   }
 
   function connectGoogle(clientId) {
@@ -4905,7 +5048,7 @@ function App() {
     setCalEvents([]);
     const next = { ...settings, googleToken: false };
     setSettings(next);
-    localStorage.setItem("nash-settings", JSON.stringify(next));
+    localStorage.setItem(NASH_SETTINGS_KEY, JSON.stringify(next));
   }
 
   function navigateView(view) {
@@ -4921,6 +5064,8 @@ function App() {
     const t = setInterval(() => fetchWeather().then(setWeather), 30 * 60_000);
     return () => clearInterval(t);
   }, []);
+
+  useScreenSleepMode(settings.screenMode || DEFAULT_SCREEN_MODE);
 
   return (
     <div className="app-shell">

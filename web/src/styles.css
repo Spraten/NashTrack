@@ -3007,6 +3007,10 @@ h2 {
   background: rgba(255, 255, 255, 0.02);
 }
 
+.settings-service-card + .settings-section-label {
+  margin-top: 14px;
+}
+
 .settings-service-header {
   display: flex;
   align-items: center;
@@ -3017,6 +3021,20 @@ h2 {
   font-size: 22px;
   flex-shrink: 0;
   line-height: 1;
+}
+
+.settings-service-icon-box {
+  width: 34px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
 }
 
 .settings-service-info {
@@ -3176,6 +3194,53 @@ h2 {
   background: rgba(88, 217, 109, 0.16);
 }
 
+.settings-mode-toggle {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 190px;
+  min-height: 32px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  gap: 3px;
+}
+
+.settings-mode-btn {
+  min-width: 0;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--fs-meta);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.settings-mode-btn.active {
+  background: rgba(88, 166, 255, 0.18);
+  color: #9fc8ff;
+}
+
+.settings-mode-btn:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.settings-mode-btn:not(:disabled):hover {
+  color: var(--text);
+}
+
+.settings-display-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  line-height: 1.45;
+}
+
 .settings-update-status {
   margin-top: 10px;
   display: grid;
@@ -3196,6 +3261,10 @@ h2 {
 
 .settings-update-status.error strong {
   color: #ff7878;
+}
+
+.settings-update-status.warning strong {
+  color: #ffd166;
 }
 
 .settings-update-status pre {

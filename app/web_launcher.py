@@ -23,6 +23,14 @@ UPDATER_URL = f"http://127.0.0.1:{UPDATER_PORT}/health"
 PORTABLE_NODE_DIR = WEB_DIR / ".tools" / "node-v24.16.0-win-x64"
 WINDOW_WIDTH = int(os.environ.get("NASH_TRACK_WINDOW_WIDTH", "800"))
 WINDOW_HEIGHT = int(os.environ.get("NASH_TRACK_WINDOW_HEIGHT", "480"))
+DISPLAY_STATE_FILE = Path(
+    os.environ.get(
+        "NASH_TRACK_DISPLAY_STATE",
+        str(Path.home() / ".config" / "nashtrack" / "display.json"),
+    )
+)
+DISPLAY_MODES = {"alwaysOn", "sleep3"}
+DISPLAY_POWER_STATES = {"on", "off"}
 _updater_server: ThreadingHTTPServer | None = None
 _updater_thread: threading.Thread | None = None
 
@@ -124,6 +132,132 @@ def _run_git_update() -> dict[str, object]:
     }
 
 
+def _run_display_command(command: list[str], timeout: float = 5.0) -> dict[str, object]:
+    try:
+        result = subprocess.run(
+            command,
+            cwd=ROOT_DIR,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        return {"ok": False, "message": str(error), "command": command[0]}
+
+    output = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
+    return {
+        "ok": result.returncode == 0,
+        "message": output,
+        "command": command[0],
+        "output": output,
+    }
+
+
+def _wlr_output_name() -> str:
+    explicit = os.environ.get("NASH_TRACK_DISPLAY_OUTPUT", "").strip()
+    if explicit:
+        return explicit
+
+    wlr_randr = shutil.which("wlr-randr")
+    if wlr_randr:
+        result = _run_display_command([wlr_randr], timeout=3.0)
+        for line in str(result.get("output", "")).splitlines():
+            if line and not line.startswith(" "):
+                return line.split()[0]
+
+    return "DSI-1"
+
+
+def _display_power_commands(state: str) -> list[list[str]]:
+    value = "1" if state == "on" else "0"
+    commands: list[list[str]] = []
+
+    vcgencmd = shutil.which("vcgencmd")
+    if vcgencmd:
+        commands.append([vcgencmd, "display_power", value])
+
+    xset = shutil.which("xset")
+    if xset and os.environ.get("DISPLAY"):
+        commands.append([xset, "dpms", "force", state])
+
+    wlr_randr = shutil.which("wlr-randr")
+    if wlr_randr:
+        commands.append([wlr_randr, "--output", _wlr_output_name(), f"--{state}"])
+
+    wlopm = shutil.which("wlopm")
+    if wlopm:
+        commands.append([wlopm, f"--{state}", _wlr_output_name()])
+
+    swaymsg = shutil.which("swaymsg")
+    if swaymsg:
+        commands.append([swaymsg, "output", "*", "dpms", state])
+
+    return commands
+
+
+def _set_display_power(state: str) -> dict[str, object]:
+    if state not in DISPLAY_POWER_STATES:
+        return {"ok": False, "message": f"Unknown display power state: {state}"}
+
+    attempts: list[dict[str, object]] = []
+    for command in _display_power_commands(state):
+        result = _run_display_command(command)
+        attempts.append(result)
+        if result.get("ok"):
+            return {
+                "ok": True,
+                "message": f"Display power {state} command sent.",
+                "command": result.get("command", command[0]),
+                "output": result.get("output", ""),
+            }
+
+    return {
+        "ok": False,
+        "message": "No supported display power command worked on this system.",
+        "attempts": attempts,
+    }
+
+
+def _save_display_mode(mode: str) -> dict[str, object]:
+    if mode not in DISPLAY_MODES:
+        return {"ok": False, "message": f"Unknown display mode: {mode}"}
+
+    try:
+        DISPLAY_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        DISPLAY_STATE_FILE.write_text(
+            json.dumps({"mode": mode, "updatedAt": time.time()}, indent=2),
+            encoding="utf-8",
+        )
+    except OSError as error:
+        return {"ok": False, "message": f"Display mode could not be saved: {error}"}
+
+    response: dict[str, object] = {
+        "ok": True,
+        "mode": mode,
+        "message": "Screen will stay on." if mode == "alwaysOn" else "Screen will sleep after 3 minutes of inactivity.",
+    }
+
+    if mode == "sleep3" and not _display_power_commands("off"):
+        response["warning"] = "Screen sleep was saved, but no display power command was found on this system."
+
+    if mode == "alwaysOn":
+        power = _set_display_power("on")
+        if not power.get("ok"):
+            response["warning"] = power.get("message", "Display power command was unavailable.")
+        else:
+            response["command"] = power.get("command")
+    return response
+
+
+def _read_display_mode() -> str:
+    try:
+        payload = json.loads(DISPLAY_STATE_FILE.read_text(encoding="utf-8"))
+        mode = str(payload.get("mode", "alwaysOn"))
+        return mode if mode in DISPLAY_MODES else "alwaysOn"
+    except (OSError, json.JSONDecodeError):
+        return "alwaysOn"
+
+
 class _UpdaterHandler(BaseHTTPRequestHandler):
     server_version = "NashTrackUpdater/1.0"
 
@@ -144,19 +278,48 @@ class _UpdaterHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self) -> None:
         self._send_json(200, {"ok": True})
 
+    def _read_json_body(self) -> dict[str, object]:
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        if length <= 0:
+            return {}
+
+        body = self.rfile.read(min(length, 65536))
+        if not body:
+            return {}
+
+        return json.loads(body.decode("utf-8"))
+
     def do_GET(self) -> None:
-        if self.path == "/health":
+        route = self.path.split("?", 1)[0]
+        if route == "/health":
             self._send_json(200, {"ok": True, "service": "Nash Track updater"})
+            return
+        if route == "/display":
+            self._send_json(200, {"ok": True, "mode": _read_display_mode()})
             return
         self._send_json(404, {"ok": False, "message": "Unknown updater route."})
 
     def do_POST(self) -> None:
-        if self.path != "/update":
-            self._send_json(404, {"ok": False, "message": "Unknown updater route."})
-            return
+        route = self.path.split("?", 1)[0]
         try:
-            result = _run_git_update()
-            self._send_json(200 if result.get("ok") else 409, result)
+            if route == "/update":
+                result = _run_git_update()
+                self._send_json(200 if result.get("ok") else 409, result)
+                return
+
+            if route == "/display":
+                payload = self._read_json_body()
+                result = _save_display_mode(str(payload.get("mode", "")))
+                self._send_json(200 if result.get("ok") else 400, result)
+                return
+
+            if route == "/display/power":
+                payload = self._read_json_body()
+                result = _set_display_power(str(payload.get("state", "")))
+                self._send_json(200 if result.get("ok") else 501, result)
+                return
+
+            self._send_json(404, {"ok": False, "message": "Unknown updater route."})
         except Exception as error:
             self._send_json(500, {"ok": False, "message": str(error)})
 

@@ -8,6 +8,7 @@ NashTrack is a compact sports command center built for an 800x480 Raspberry Pi t
 - [x] Web launcher flow through `main.py` and `app/web_launcher.py`.
 - [x] Raspberry Pi Chromium fullscreen launch support.
 - [x] Settings update button that pulls the GitHub repo through the local updater service.
+- [x] Settings display mode for Raspberry Pi screen sleep after 3 minutes or always-on mode.
 - [x] Direct hash routes for tabs, such as `#f1`.
 - [x] Halo-style F1 command view with current/next session, weekend stack, standings, results, news, track weather, season rail, and no-spoiler mode.
 
