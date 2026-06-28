@@ -177,6 +177,17 @@ async function fetchWeather() {
 // ─── ESPN API ─────────────────────────────────────────────────────────────────
 
 const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports";
+const ESPN_WEB_BASE = "https://site.web.api.espn.com/apis/v2/sports";
+
+function espnText(value) {
+  return value == null || typeof value === "object" ? "" : String(value);
+}
+
+async function fetchESPNJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`ESPN ${res.status}`);
+  return res.json();
+}
 
 async function fetchScoreboard(sport, league) {
   try {
@@ -402,6 +413,205 @@ async function fetchGameDetail(sport, league, eventId) {
       article,
       videos,
     };
+  } catch { return null; }
+}
+
+function nflStatMap(stats = []) {
+  return Object.fromEntries((Array.isArray(stats) ? stats : []).map((stat) => [
+    espnText(stat.name),
+    {
+      value: espnText(stat.displayValue ?? stat.value),
+      label: espnText(stat.shortDisplayName || stat.displayName || stat.name),
+    },
+  ]));
+}
+
+function normalizeNFLStandingEntry(entry) {
+  const stats = nflStatMap(entry?.stats);
+  const stat = (name) => stats[name]?.value || "";
+  const team = entry?.team || {};
+  return {
+    id: espnText(team.id),
+    team: espnText(team.abbreviation || team.shortDisplayName),
+    name: espnText(team.shortDisplayName || team.displayName || team.name),
+    logo: espnText(team.logos?.[0]?.href || team.logo),
+    seed: stat("playoffSeed"),
+    record: stat("overall"),
+    pct: stat("winPercent"),
+    diff: stat("differential") || stat("pointDifferential"),
+    streak: stat("streak"),
+    pf: stat("pointsFor"),
+    pa: stat("pointsAgainst"),
+    divRecord: stat("divisionRecord") || stat("vs. Div."),
+    confRecord: stat("conferenceRecord") || stat("vs. Conf."),
+    clincher: stat("clincher"),
+  };
+}
+
+function normalizeNFLStandings(conferenceData, divisionData = []) {
+  const normalizeConference = (conference) => ({
+    abbr: espnText(conference?.abbreviation),
+    name: espnText(conference?.name),
+    rows: (conference?.standings?.entries || [])
+      .map(normalizeNFLStandingEntry)
+      .filter((row) => row.team)
+      .sort((a, b) => Number(a.seed || 99) - Number(b.seed || 99)),
+  });
+
+  const conferences = (conferenceData?.children || [])
+    .map(normalizeConference)
+    .filter((conference) => conference.abbr && conference.rows.length);
+
+  const divisions = divisionData.flatMap((group) =>
+    (group?.children || []).map((division) => ({
+      conference: espnText(group?.abbreviation),
+      abbr: espnText(division?.abbreviation),
+      name: espnText(division?.name),
+      rows: (division?.standings?.entries || [])
+        .map(normalizeNFLStandingEntry)
+        .filter((row) => row.team),
+    }))
+  ).filter((division) => division.rows.length);
+
+  return {
+    season: espnText(conferenceData?.season?.year || conferenceData?.season?.displayName),
+    conferences,
+    divisions,
+  };
+}
+
+async function fetchNFLStandings() {
+  try {
+    const base = `${ESPN_WEB_BASE}/football/nfl/standings?region=us&lang=en&contentorigin=espn&sort=playoffSeed&seasontype=2`;
+    const [conferenceData, nfcData, afcData] = await Promise.all([
+      fetchESPNJson(base),
+      fetchESPNJson(`${base}&group=7`),
+      fetchESPNJson(`${base}&group=8`),
+    ]);
+    return normalizeNFLStandings(conferenceData, [nfcData, afcData]);
+  } catch { return { season: "", conferences: [], divisions: [] }; }
+}
+
+function nflInjurySeverity(row) {
+  const text = `${row.status} ${row.type} ${row.statusCode}`.toLowerCase();
+  if (text.includes("injured reserve") || text.includes(" ir") || text.includes("out")) return 1;
+  if (text.includes("doubt")) return 2;
+  if (text.includes("question")) return 3;
+  if (text.includes("probable")) return 4;
+  if (text.includes("active")) return 8;
+  return 5;
+}
+
+function normalizeNFLInjuries(data) {
+  const rows = [];
+  (data?.injuries || []).forEach((teamBucket) => {
+    (teamBucket?.injuries || []).forEach((injury) => {
+      const athlete = injury?.athlete || {};
+      const team = athlete.team || {};
+      const type = injury?.type || {};
+      const details = injury?.details || {};
+      const status = espnText(injury?.status || athlete.status?.name || type.description);
+      const statusCode = espnText(type.abbreviation || athlete.status?.abbreviation || status.slice(0, 3).toUpperCase());
+      const row = {
+        id: espnText(injury?.id || athlete.id),
+        team: espnText(team.abbreviation || team.shortDisplayName || teamBucket?.abbreviation),
+        teamName: espnText(team.displayName || team.name || teamBucket?.displayName),
+        name: espnText(athlete.shortName || athlete.displayName),
+        pos: espnText(athlete.position?.abbreviation),
+        status,
+        statusCode,
+        type: espnText(type.description || type.name || status),
+        injury: espnText(details.type || details.location || injury?.shortComment),
+        detail: espnText(details.detail || injury?.shortComment || injury?.longComment),
+        returnDate: espnText(details.returnDate),
+        date: espnText(injury?.date),
+      };
+      if (row.name && row.team) rows.push(row);
+    });
+  });
+
+  return rows.sort((a, b) => {
+    const favoriteDelta = Number(nflFavoriteTags().has(b.team)) - Number(nflFavoriteTags().has(a.team));
+    if (favoriteDelta) return favoriteDelta;
+    const severityDelta = nflInjurySeverity(a) - nflInjurySeverity(b);
+    if (severityDelta) return severityDelta;
+    return new Date(b.date || 0) - new Date(a.date || 0);
+  });
+}
+
+async function fetchNFLInjuries() {
+  try {
+    return normalizeNFLInjuries(await fetchESPNJson(`${ESPN_BASE}/football/nfl/injuries`));
+  } catch { return []; }
+}
+
+function normalizeNFLTeamStats(data) {
+  const categories = data?.results?.stats?.categories || [];
+  const byCategory = Object.fromEntries(categories.map((category) => [
+    espnText(category.name),
+    nflStatMap(category.stats),
+  ]));
+  const pick = (category, names) => {
+    const stats = byCategory[category] || {};
+    const name = names.find((key) => stats[key]?.value);
+    return name ? stats[name].value : "";
+  };
+  const rows = [
+    { label: "PPG", value: pick("scoring", ["totalPointsPerGame"]) || pick("passing", ["totalPointsPerGame"]) },
+    { label: "YPG", value: pick("passing", ["yardsPerGame"]) || pick("rushing", ["totalYards"]) },
+    { label: "Pass YPG", value: pick("passing", ["netPassingYardsPerGame", "passingYardsPerGame"]) },
+    { label: "Rush YPG", value: pick("rushing", ["rushingYardsPerGame"]) },
+    { label: "3D%", value: pick("miscellaneous", ["thirdDownConvPct"]) },
+    { label: "RZ TD%", value: pick("miscellaneous", ["redzoneTouchdownPct"]) },
+    { label: "TO Diff", value: pick("miscellaneous", ["turnOverDifferential"]) },
+    { label: "Sacks", value: pick("defensive", ["sacks"]) },
+    { label: "Takeaways", value: pick("miscellaneous", ["totalTakeaways"]) },
+  ].filter((row) => row.value);
+  return {
+    team: espnText(data?.team?.abbreviation),
+    name: espnText(data?.team?.displayName),
+    season: espnText(data?.season?.year || data?.requestedSeason?.year),
+    rows,
+  };
+}
+
+async function fetchNFLTeamStats(teamAbbr) {
+  if (!teamAbbr) return null;
+  try {
+    const data = await fetchESPNJson(`${ESPN_BASE}/football/nfl/teams/${teamAbbr.toLowerCase()}/statistics`);
+    return normalizeNFLTeamStats(data);
+  } catch { return null; }
+}
+
+function normalizeNFLTeamRoster(data) {
+  const groups = (data?.athletes || []).map((group) => ({
+    key: espnText(group.position),
+    label: espnText(group.position)
+      .replace("specialTeam", "Special")
+      .replace(/^./, (ch) => ch.toUpperCase()),
+    players: (group.items || []).map((player) => ({
+      id: espnText(player.id),
+      name: espnText(player.shortName || player.displayName),
+      pos: espnText(player.position?.abbreviation),
+      jersey: espnText(player.jersey),
+      status: espnText(player.status?.type || player.status?.name),
+      headshot: espnText(player.headshot?.href),
+    })).filter((player) => player.name),
+  })).filter((group) => group.players.length);
+
+  return {
+    team: espnText(data?.team?.abbreviation),
+    name: espnText(data?.team?.displayName),
+    groups,
+    players: groups.flatMap((group) => group.players.map((player) => ({ ...player, group: group.key }))),
+  };
+}
+
+async function fetchNFLTeamRoster(teamAbbr) {
+  if (!teamAbbr) return null;
+  try {
+    const data = await fetchESPNJson(`${ESPN_BASE}/football/nfl/teams/${teamAbbr.toLowerCase()}/roster`);
+    return normalizeNFLTeamRoster(data);
   } catch { return null; }
 }
 
@@ -1679,6 +1889,7 @@ const NFL_PANEL_TABS = [
   { key: "players", label: "Players" },
   { key: "injuries", label: "Injuries" },
   { key: "teams", label: "Teams" },
+  { key: "standings", label: "Standings" },
   { key: "news", label: "News" },
 ];
 
@@ -1898,6 +2109,33 @@ function NFLTeamStats({ detail, game }) {
   );
 }
 
+function NFLSeasonTeamStats({ game, teamSnapshots, detail }) {
+  if (!game) return <p className="gcal-empty">Select an NFL game</p>;
+  const awayRows = teamSnapshots?.[game.away]?.stats?.rows || [];
+  const homeRows = teamSnapshots?.[game.home]?.stats?.rows || [];
+  const labels = [...new Set([...awayRows, ...homeRows].map((row) => row.label))].slice(0, 8);
+  const rowFor = (rows, label) => rows.find((row) => row.label === label)?.value || "";
+
+  if (!labels.length) return <NFLTeamStats detail={detail} game={game} />;
+
+  return (
+    <div className="nfl-team-stats">
+      <div className="nfl-team-stats-head">
+        <span>{game.away}</span>
+        <strong>SEASON TEAM STATS</strong>
+        <span>{game.home}</span>
+      </div>
+      {labels.map((label) => (
+        <div className="nfl-team-stat-row" key={label}>
+          <b>{rowFor(awayRows, label) || "--"}</b>
+          <span>{label}</span>
+          <b>{rowFor(homeRows, label) || "--"}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function NFLGameCenter({ game, detail, loading, onOpenModal }) {
   if (!game) return <p className="gcal-empty">Select an NFL game</p>;
   const hasOdds = detail && (detail.spread || detail.overUnder || detail.awayML || detail.homeML);
@@ -1949,15 +2187,23 @@ function NFLGameCenter({ game, detail, loading, onOpenModal }) {
   );
 }
 
-function NFLPlayers({ game, detail, loading }) {
-  if (loading && !detail) return <div className="loading-pulse" />;
+function NFLPlayers({ game, detail, loading, teamSnapshots }) {
+  const [rosterGroup, setRosterGroup] = useState("offense");
+  if (loading && !detail && !Object.keys(teamSnapshots || {}).length) return <div className="loading-pulse" />;
   const leaders = detail?.leaders || [];
   const awayRoster = detail?.rosters?.[game?.away] || {};
   const homeRoster = detail?.rosters?.[game?.home] || {};
-  const starters = [
+  const detailStarters = [
     ...(awayRoster.starters || []).slice(0, 6).map((player) => ({ ...player, team: game.away })),
     ...(homeRoster.starters || []).slice(0, 6).map((player) => ({ ...player, team: game.home })),
   ];
+  const snapshotPlayers = [game?.away, game?.home].filter(Boolean).flatMap((abbr) => {
+    const roster = teamSnapshots?.[abbr]?.roster;
+    const group = roster?.groups?.find((item) => item.key === rosterGroup) || roster?.groups?.[0];
+    return (group?.players || []).slice(0, 8).map((player) => ({ ...player, team: abbr }));
+  });
+  const players = snapshotPlayers.length ? snapshotPlayers : detailStarters;
+
   return (
     <div className="nfl-players-grid">
       <div className="nfl-leaders-list">
@@ -1971,8 +2217,21 @@ function NFLPlayers({ game, detail, loading }) {
         )) : <p className="gcal-empty">Leaders unavailable</p>}
       </div>
       <div className="nfl-roster-list">
-        <span className="nfl-mini-label">PLAYER WATCH</span>
-        {starters.length ? starters.map((player, index) => (
+        <div className="nfl-list-head">
+          <span className="nfl-mini-label">PLAYER WATCH</span>
+          <div className="nfl-subtabs compact">
+            {[
+              { key: "offense", label: "Off" },
+              { key: "defense", label: "Def" },
+              { key: "specialTeam", label: "ST" },
+            ].map((tab) => (
+              <button key={tab.key} className={rosterGroup === tab.key ? "active" : ""} onClick={() => setRosterGroup(tab.key)}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {players.length ? players.slice(0, 12).map((player, index) => (
           <div className="nfl-player-row" key={`${player.team}-${player.name}-${index}`}>
             <span>{player.team}</span>
             <strong>{player.name}</strong>
@@ -1984,46 +2243,154 @@ function NFLPlayers({ game, detail, loading }) {
   );
 }
 
-function NFLInjuries({ detail, loading }) {
-  if (loading && !detail) return <div className="loading-pulse" />;
-  const injuries = detail?.injuries || [];
-  if (!injuries.length) return <p className="gcal-empty">No injuries listed for the selected matchup</p>;
+function NFLInjuries({ detail, loading, leagueInjuries, selectedGame }) {
+  const [filter, setFilter] = useState("impact");
+  if (loading && !detail && !leagueInjuries?.length) return <div className="loading-pulse" />;
+  const matchupTeams = new Set([selectedGame?.away, selectedGame?.home].filter(Boolean));
+  const detailRows = (detail?.injuries || []).map((injury) => ({
+    ...injury,
+    statusCode: injury.status || injury.type || "Listed",
+    injury: injury.type || "",
+    detail: "",
+  }));
+  const source = leagueInjuries?.length ? leagueInjuries : detailRows;
+  const favoriteTags = nflFavoriteTags();
+  const filters = [
+    { key: "impact", label: "Impact" },
+    { key: "game", label: "Game" },
+    { key: "favorites", label: "Favs" },
+    { key: "all", label: "All" },
+  ];
+  const injuries = source.filter((injury) => {
+    if (filter === "game") return matchupTeams.has(injury.team);
+    if (filter === "favorites") return favoriteTags.has(injury.team);
+    if (filter === "impact") return nflInjurySeverity(injury) < 8;
+    return true;
+  });
+
+  if (!source.length) return <p className="gcal-empty">No NFL injury feed returned</p>;
+
   return (
-    <div className="nfl-injury-board">
-      {injuries.slice(0, 12).map((injury, index) => (
-        <div className="nfl-injury-row" key={`${injury.name}-${index}`}>
-          <span>{injury.team}</span>
-          <strong>{injury.name}</strong>
-          <em>{injury.pos || "--"}</em>
-          <b>{injury.status || injury.type || "Listed"}</b>
-        </div>
-      ))}
+    <div className="nfl-injury-shell">
+      <div className="nfl-subtabs">
+        {filters.map((tab) => (
+          <button key={tab.key} className={filter === tab.key ? "active" : ""} onClick={() => setFilter(tab.key)}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div className="nfl-injury-board">
+        {injuries.length ? injuries.slice(0, 12).map((injury, index) => (
+          <div className="nfl-injury-row" key={`${injury.team}-${injury.name}-${index}`}>
+            <span>{injury.team}</span>
+            <strong>{injury.name}</strong>
+            <em>{injury.pos || "--"}</em>
+            <small>{injury.injury || injury.detail || injury.type || "--"}</small>
+            <b>{injury.statusCode || injury.status || "Listed"}</b>
+          </div>
+        )) : <p className="gcal-empty">No injuries match this filter</p>}
+      </div>
     </div>
   );
 }
 
-function NFLTeams({ game, detail, loading }) {
+function NFLTeams({ game, detail, loading, teamSnapshots, standings }) {
   if (!game) return <p className="gcal-empty">Select an NFL game</p>;
-  if (loading && !detail) return <div className="loading-pulse" />;
+  if (loading && !detail && !Object.keys(teamSnapshots || {}).length) return <div className="loading-pulse" />;
   const awayLeaders = detail?.teamLeaders?.[game?.away] || [];
   const homeLeaders = detail?.teamLeaders?.[game?.home] || [];
+  const matchupTeams = new Set([game.away, game.home]);
+  const relatedDivisions = (standings?.divisions || []).filter((division) =>
+    division.rows.some((row) => matchupTeams.has(row.team))
+  ).slice(0, 2);
   return (
     <div className="nfl-teams-grid">
-      <NFLTeamStats detail={detail} game={game} />
-      <div className="nfl-team-leaders">
-        {[{ abbr: game?.away, list: awayLeaders }, { abbr: game?.home, list: homeLeaders }].map(({ abbr, list }) => (
-          <div className="nfl-team-leader-col" key={abbr}>
-            <span className="nfl-mini-label">{abbr} LEADERS</span>
-            {list.length ? list.slice(0, 4).map((leader, index) => (
-              <div className="nfl-leader-row" key={index}>
-                <b>{leader.stat}</b>
-                <strong>{leader.name}</strong>
-                <span>{leader.category}</span>
+      <NFLSeasonTeamStats game={game} teamSnapshots={teamSnapshots} detail={detail} />
+      <div className="nfl-team-context">
+        <div className="nfl-team-leaders">
+          {[{ abbr: game?.away, list: awayLeaders }, { abbr: game?.home, list: homeLeaders }].map(({ abbr, list }) => (
+            <div className="nfl-team-leader-col" key={abbr}>
+              <span className="nfl-mini-label">{abbr} LEADERS</span>
+              {list.length ? list.slice(0, 3).map((leader, index) => (
+                <div className="nfl-leader-row" key={index}>
+                  <b>{leader.stat}</b>
+                  <strong>{leader.name}</strong>
+                  <span>{leader.category}</span>
+                </div>
+              )) : <p className="gcal-empty">Unavailable</p>}
+            </div>
+          ))}
+        </div>
+        {relatedDivisions.length > 0 && (
+          <div className="nfl-team-division-strip">
+            {relatedDivisions.map((division) => (
+              <div className="nfl-mini-division" key={division.name}>
+                <span className="nfl-mini-label">{division.name}</span>
+                {division.rows.slice(0, 4).map((row) => (
+                  <div className="nfl-mini-standing-row" key={row.team}>
+                    <b>{row.seed || "-"}</b>
+                    <strong>{row.team}</strong>
+                    <span>{row.record || "--"}</span>
+                  </div>
+                ))}
               </div>
-            )) : <p className="gcal-empty">Unavailable</p>}
+            ))}
           </div>
-        ))}
+        )}
       </div>
+    </div>
+  );
+}
+
+function NFLStandings({ standings }) {
+  const [mode, setMode] = useState("playoff");
+  if (!standings?.conferences?.length) return <p className="gcal-empty">NFL standings unavailable</p>;
+  return (
+    <div className="nfl-standings-shell">
+      <div className="nfl-subtabs">
+        <button className={mode === "playoff" ? "active" : ""} onClick={() => setMode("playoff")}>Playoff</button>
+        <button className={mode === "divisions" ? "active" : ""} onClick={() => setMode("divisions")}>Divisions</button>
+      </div>
+      {mode === "playoff" ? (
+        <div className="nfl-standings-grid">
+          {standings.conferences.map((conference) => (
+            <div className="nfl-standings-col" key={conference.abbr}>
+              <div className="nfl-standings-head">
+                <span>{conference.abbr}</span>
+                <b>WILD CARD RACE</b>
+              </div>
+              {conference.rows.slice(0, 8).map((row) => (
+                <div className="nfl-standing-row" key={`${conference.abbr}-${row.team}`}>
+                  <b>{row.seed || "-"}</b>
+                  <strong>{row.team}</strong>
+                  <span>{row.record || "--"}</span>
+                  <em>{row.diff || "0"}</em>
+                  <small>{row.streak || "--"}</small>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="nfl-division-grid">
+          {standings.divisions.map((division) => (
+            <div className="nfl-division-card" key={`${division.conference}-${division.abbr}`}>
+              <div className="nfl-standings-head">
+                <span>{division.name}</span>
+                <b>{division.conference}</b>
+              </div>
+              {division.rows.slice(0, 4).map((row) => (
+                <div className="nfl-division-row" key={row.team}>
+                  <strong>{row.team}</strong>
+                  <span>{row.record || "--"}</span>
+                  <em>{row.divRecord || "--"}</em>
+                  <small>{row.diff || "0"}</small>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2046,7 +2413,7 @@ function NFLNews({ articles }) {
   );
 }
 
-function NFLDataPanel({ activePanel, setActivePanel, game, detail, loading, news, onOpenModal }) {
+function NFLDataPanel({ activePanel, setActivePanel, game, detail, loading, news, leagueInjuries, standings, teamSnapshots, onOpenModal }) {
   return (
     <section className="panel nfl-data-panel">
       <div className="nfl-data-tabs">
@@ -2058,9 +2425,10 @@ function NFLDataPanel({ activePanel, setActivePanel, game, detail, loading, news
       </div>
       <div className="nfl-data-body">
         {activePanel === "center" && <NFLGameCenter game={game} detail={detail} loading={loading} onOpenModal={onOpenModal} />}
-        {activePanel === "players" && <NFLPlayers game={game} detail={detail} loading={loading} />}
-        {activePanel === "injuries" && <NFLInjuries detail={detail} loading={loading} />}
-        {activePanel === "teams" && <NFLTeams game={game} detail={detail} loading={loading} />}
+        {activePanel === "players" && <NFLPlayers game={game} detail={detail} loading={loading} teamSnapshots={teamSnapshots} />}
+        {activePanel === "injuries" && <NFLInjuries detail={detail} loading={loading} leagueInjuries={leagueInjuries} selectedGame={game} />}
+        {activePanel === "teams" && <NFLTeams game={game} detail={detail} loading={loading} teamSnapshots={teamSnapshots} standings={standings} />}
+        {activePanel === "standings" && <NFLStandings standings={standings} />}
         {activePanel === "news" && <NFLNews articles={news} />}
       </div>
     </section>
@@ -2070,6 +2438,9 @@ function NFLDataPanel({ activePanel, setActivePanel, game, detail, loading, news
 function NFLCommandView({ onUpdated, onNextRefresh }) {
   const [games, setGames] = useState([]);
   const [news, setNews] = useState([]);
+  const [leagueInjuries, setLeagueInjuries] = useState([]);
+  const [standings, setStandings] = useState({ season: "", conferences: [], divisions: [] });
+  const [teamSnapshots, setTeamSnapshots] = useState({});
   const [selectedId, setSelectedId] = useState("");
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -2078,17 +2449,31 @@ function NFLCommandView({ onUpdated, onNextRefresh }) {
   const [activePanel, setActivePanel] = useState("center");
   const [modalGame, setModalGame] = useState(null);
   const loadRef = useRef(null);
+  const slowDataRef = useRef({ at: 0, injuries: [], standings: { season: "", conferences: [], divisions: [] } });
+  const teamSnapshotCacheRef = useRef({});
 
   const selectedGame = games.find((game) => game.id === selectedId) || games[0] || null;
 
   loadRef.current = async function loadNFLCommandView() {
-    const [scoreboard, headlines] = await Promise.all([
+    const shouldRefreshSlow = Date.now() - slowDataRef.current.at > 15 * 60_000;
+    const slowDataPromise = shouldRefreshSlow
+      ? Promise.all([fetchNFLInjuries(), fetchNFLStandings()]).then(([injuries, standingsData]) => {
+          const next = { at: Date.now(), injuries, standings: standingsData };
+          slowDataRef.current = next;
+          return next;
+        })
+      : Promise.resolve(slowDataRef.current);
+
+    const [scoreboard, headlines, slowData] = await Promise.all([
       fetchScoreboard("football", "nfl"),
       fetchNews("football", "nfl"),
+      slowDataPromise,
     ]);
     const normalized = nflSortGames(scoreboard.map((event) => parseESPNEvent(event, "NFL", "green", "football", "nfl")));
     setGames(normalized);
     setNews(headlines);
+    setLeagueInjuries(slowData.injuries || []);
+    setStandings(slowData.standings || { season: "", conferences: [], divisions: [] });
     setSelectedId((prev) => normalized.some((game) => game.id === prev) ? prev : (normalized[0]?.id || ""));
     setError(normalized.length ? "" : "No NFL scoreboard returned.");
     setLoading(false);
@@ -2141,6 +2526,30 @@ function NFLCommandView({ onUpdated, onNextRefresh }) {
     return () => { cancelled = true; clearTimeout(timerId); };
   }, [selectedGame?.id, selectedGame?.isLive]);
 
+  useEffect(() => {
+    const teams = [selectedGame?.away, selectedGame?.home].filter(Boolean);
+    if (!teams.length) {
+      setTeamSnapshots({});
+      return;
+    }
+    let cancelled = false;
+    async function loadTeamSnapshots() {
+      const pairs = await Promise.all(teams.map(async (abbr) => {
+        if (teamSnapshotCacheRef.current[abbr]) return [abbr, teamSnapshotCacheRef.current[abbr]];
+        const [stats, roster] = await Promise.all([
+          fetchNFLTeamStats(abbr),
+          fetchNFLTeamRoster(abbr),
+        ]);
+        const snapshot = { stats, roster, at: Date.now() };
+        teamSnapshotCacheRef.current[abbr] = snapshot;
+        return [abbr, snapshot];
+      }));
+      if (!cancelled) setTeamSnapshots(Object.fromEntries(pairs));
+    }
+    loadTeamSnapshots();
+    return () => { cancelled = true; };
+  }, [selectedGame?.away, selectedGame?.home]);
+
   return (
     <>
       {modalGame && (
@@ -2159,6 +2568,9 @@ function NFLCommandView({ onUpdated, onNextRefresh }) {
           detail={selectedDetail}
           loading={detailLoading}
           news={news}
+          leagueInjuries={leagueInjuries}
+          standings={standings}
+          teamSnapshots={teamSnapshots}
           onOpenModal={() => selectedGame && setModalGame(selectedGame)}
         />
       </main>

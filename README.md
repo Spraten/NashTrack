@@ -33,7 +33,7 @@ Goal: rebuild the Football tab into an NFL command center that feels useful on g
   - Game leaders and season leaders.
   - Later: recent form, fantasy-style stat glance, and player-specific news.
 
-- [ ] **Injuries**
+- [x] **Injuries**
   - League-wide injury board.
   - Filter by team and status: Out, Doubtful, Questionable, IR, or available statuses from the feed.
   - Highlight favorite teams and key offensive players.
@@ -49,7 +49,7 @@ Goal: rebuild the Football tab into an NFL command center that feels useful on g
   - Team-specific news filter.
   - Preview and recap article support from game summaries.
 
-- [ ] **Standings And Playoff Picture**
+- [x] **Standings And Playoff Picture**
   - AFC/NFC standings.
   - Division rows.
   - Wild card race.
@@ -64,11 +64,13 @@ Goal: rebuild the Football tab into an NFL command center that feels useful on g
 
 - [x] Phase 1: build the RedZone Live command view for the Football tab.
 - [ ] Phase 2: reuse and expand the existing game detail modal into an NFL Game Center.
-- [ ] Phase 3: add Injuries, Players, Teams, News, and Standings segmented panels.
+- [x] Phase 3: add Injuries, Players, Teams, News, and Standings segmented panels.
 - [x] Phase 4: add favorite-team priority sorting and alert logic.
 - [ ] Phase 5: verify the full NFL flow on the Raspberry Pi at 800x480.
 
 First pass added: Football tab command view, urgency-sorted slate, red-zone/one-score/favorite alerts, selected-game panels for Game, Players, Injuries, Teams, and News, and adaptive refresh timing.
+
+Second pass added: league-wide ESPN injury board with filters, AFC/NFC playoff standings, division rows, selected-matchup season team stats, and selected-matchup roster support.
 
 ### NFL Data Notes
 
@@ -76,6 +78,10 @@ First pass added: Football tab command view, urgency-sorted slate, red-zone/one-
   - Scoreboard: `site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`
   - News: `site.api.espn.com/apis/site/v2/sports/football/nfl/news`
   - Game summary: `site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=...`
+  - Injuries: `site.api.espn.com/apis/site/v2/sports/football/nfl/injuries`
+  - Standings/playoff picture: `site.web.api.espn.com/apis/v2/sports/football/nfl/standings?...`
+  - Team stats: `site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{abbr}/statistics`
+  - Team roster: `site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{abbr}/roster`
 - NashTrack already normalizes useful ESPN summary data for details: injuries, leaders, rosters, plays, win probability, team stats, articles, and videos.
 - Avoid new npm dependencies unless a feature truly needs one.
 - Keep every NFL view touch-friendly and stable at 800x480.

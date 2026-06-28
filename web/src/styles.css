@@ -2388,6 +2388,7 @@ h2 {
 .nfl-injury-row strong,
 .nfl-injury-row em,
 .nfl-injury-row b,
+.nfl-injury-row small,
 .nfl-player-row span,
 .nfl-player-row strong,
 .nfl-player-row em,
@@ -2396,6 +2397,16 @@ h2 {
 .nfl-leader-row span,
 .nfl-team-stat-row b,
 .nfl-team-stat-row span,
+.nfl-standing-row strong,
+.nfl-standing-row span,
+.nfl-standing-row em,
+.nfl-standing-row small,
+.nfl-division-row strong,
+.nfl-division-row span,
+.nfl-division-row em,
+.nfl-division-row small,
+.nfl-mini-standing-row strong,
+.nfl-mini-standing-row span,
 .nfl-news-row strong,
 .nfl-news-row span {
   min-width: 0;
@@ -2573,13 +2584,14 @@ h2 {
 .nfl-data-tabs {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 5px;
 }
 
 .nfl-data-tabs button,
 .nfl-open-btn,
-.nfl-news-row {
+.nfl-news-row,
+.nfl-subtabs button {
   border: 1px solid var(--line);
   background: rgba(13, 27, 42, 0.86);
   color: var(--text);
@@ -2620,7 +2632,10 @@ h2 {
 .nfl-roster-list,
 .nfl-team-stats,
 .nfl-team-leaders,
-.nfl-team-leader-col {
+.nfl-team-leader-col,
+.nfl-standings-col,
+.nfl-division-card,
+.nfl-mini-division {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -2695,10 +2710,49 @@ h2 {
 .nfl-leaders-list,
 .nfl-roster-list,
 .nfl-team-stats,
-.nfl-team-leaders {
+.nfl-team-leaders,
+.nfl-standings-col,
+.nfl-division-card,
+.nfl-mini-division {
   display: grid;
   gap: 5px;
   padding: 7px;
+}
+
+.nfl-list-head,
+.nfl-standings-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.nfl-subtabs {
+  min-width: 0;
+  height: 24px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.nfl-subtabs.compact {
+  width: 120px;
+  height: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.nfl-subtabs button {
+  min-width: 0;
+  height: 100%;
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.nfl-subtabs button.active {
+  border-color: rgba(88, 217, 109, 0.62);
+  background: rgba(88, 217, 109, 0.14);
 }
 
 .nfl-play-list,
@@ -2710,11 +2764,34 @@ h2 {
   overflow: hidden;
 }
 
+.nfl-injury-shell,
+.nfl-standings-shell,
+.nfl-team-context {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.nfl-injury-shell,
+.nfl-standings-shell {
+  grid-template-rows: 24px minmax(0, 1fr);
+}
+
+.nfl-team-context {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
 .nfl-play-row,
 .nfl-injury-row,
 .nfl-player-row,
 .nfl-leader-row,
-.nfl-team-stat-row {
+.nfl-team-stat-row,
+.nfl-standing-row,
+.nfl-division-row,
+.nfl-mini-standing-row {
   min-width: 0;
   min-height: 0;
   display: grid;
@@ -2737,7 +2814,15 @@ h2 {
 .nfl-player-row span,
 .nfl-player-row em,
 .nfl-leader-row span,
-.nfl-injury-row em {
+.nfl-injury-row em,
+.nfl-injury-row small,
+.nfl-standing-row span,
+.nfl-standing-row em,
+.nfl-standing-row small,
+.nfl-division-row span,
+.nfl-division-row em,
+.nfl-division-row small,
+.nfl-mini-standing-row span {
   color: var(--muted);
   font-size: 9px;
 }
@@ -2745,7 +2830,10 @@ h2 {
 .nfl-play-row strong,
 .nfl-player-row strong,
 .nfl-leader-row strong,
-.nfl-injury-row strong {
+.nfl-injury-row strong,
+.nfl-standing-row strong,
+.nfl-division-row strong,
+.nfl-mini-standing-row strong {
   color: var(--text);
   font-size: 10px;
 }
@@ -2773,7 +2861,7 @@ h2 {
 
 .nfl-injury-row {
   height: 24px;
-  grid-template-columns: 34px minmax(0, 1fr) 30px 74px;
+  grid-template-columns: 34px minmax(0, 1fr) 30px 100px 62px;
   padding: 0 6px;
 }
 
@@ -2839,6 +2927,82 @@ h2 {
 
 .nfl-team-leaders {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.nfl-team-division-strip {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.nfl-mini-division {
+  padding: 5px;
+}
+
+.nfl-mini-standing-row {
+  height: 18px;
+  grid-template-columns: 18px 34px minmax(0, 1fr);
+  gap: 4px;
+  padding: 0 5px;
+}
+
+.nfl-mini-standing-row b {
+  color: var(--green);
+  font-size: 8px;
+}
+
+.nfl-standings-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  overflow: hidden;
+}
+
+.nfl-division-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  overflow: hidden;
+}
+
+.nfl-standings-head span,
+.nfl-standings-head b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.nfl-standings-head span {
+  color: var(--green);
+}
+
+.nfl-standings-head b {
+  color: var(--muted);
+}
+
+.nfl-standing-row {
+  height: 20px;
+  grid-template-columns: 20px minmax(0, 1fr) 48px 42px 34px;
+  padding: 0 6px;
+}
+
+.nfl-standing-row b {
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.nfl-division-row {
+  height: 18px;
+  grid-template-columns: 34px minmax(0, 1fr) 42px 34px;
+  padding: 0 5px;
 }
 
 .nfl-news-list {
@@ -2990,7 +3154,10 @@ h2 {
   .nfl-roster-list,
   .nfl-team-stats,
   .nfl-team-leaders,
-  .nfl-team-leader-col {
+  .nfl-team-leader-col,
+  .nfl-standings-col,
+  .nfl-division-card,
+  .nfl-mini-division {
     border-radius: 6px;
   }
 
@@ -2999,9 +3166,32 @@ h2 {
   .nfl-leaders-list,
   .nfl-roster-list,
   .nfl-team-stats,
-  .nfl-team-leaders {
+  .nfl-team-leaders,
+  .nfl-standings-col,
+  .nfl-division-card {
     gap: 3px;
     padding: 5px;
+  }
+
+  .nfl-injury-shell,
+  .nfl-standings-shell {
+    grid-template-rows: 20px minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .nfl-subtabs {
+    height: 20px;
+    gap: 3px;
+  }
+
+  .nfl-subtabs.compact {
+    width: 96px;
+    height: 17px;
+  }
+
+  .nfl-subtabs button {
+    border-radius: 4px;
+    font-size: 7px;
   }
 
   .nfl-matchup-score {
@@ -3037,6 +3227,14 @@ h2 {
   .nfl-player-row em,
   .nfl-leader-row span,
   .nfl-injury-row em,
+  .nfl-injury-row small,
+  .nfl-standing-row span,
+  .nfl-standing-row em,
+  .nfl-standing-row small,
+  .nfl-division-row span,
+  .nfl-division-row em,
+  .nfl-division-row small,
+  .nfl-mini-standing-row span,
   .nfl-mini-label {
     font-size: 7px;
   }
@@ -3044,7 +3242,10 @@ h2 {
   .nfl-play-row strong,
   .nfl-player-row strong,
   .nfl-leader-row strong,
-  .nfl-injury-row strong {
+  .nfl-injury-row strong,
+  .nfl-standing-row strong,
+  .nfl-division-row strong,
+  .nfl-mini-standing-row strong {
     font-size: 8px;
   }
 
@@ -3066,12 +3267,14 @@ h2 {
 
   .nfl-injury-row {
     height: 20px;
-    grid-template-columns: 28px minmax(0, 1fr) 24px 58px;
+    grid-template-columns: 28px minmax(0, 1fr) 22px 58px 44px;
     padding: 0 5px;
   }
 
   .nfl-injury-row span,
   .nfl-injury-row b,
+  .nfl-standing-row b,
+  .nfl-mini-standing-row b,
   .nfl-team-stat-row b,
   .nfl-team-stat-row span {
     font-size: 8px;
@@ -3085,6 +3288,48 @@ h2 {
   .nfl-team-stat-row {
     height: 18px;
     padding: 0 5px;
+  }
+
+  .nfl-team-division-strip {
+    gap: 3px;
+  }
+
+  .nfl-mini-division {
+    padding: 4px;
+  }
+
+  .nfl-mini-standing-row {
+    height: 15px;
+    grid-template-columns: 14px 28px minmax(0, 1fr);
+    gap: 3px;
+    padding: 0 4px;
+  }
+
+  .nfl-standings-grid {
+    gap: 4px;
+  }
+
+  .nfl-division-grid {
+    gap: 4px;
+  }
+
+  .nfl-standings-head span,
+  .nfl-standings-head b {
+    font-size: 7px;
+  }
+
+  .nfl-standing-row {
+    height: 16px;
+    grid-template-columns: 16px minmax(0, 1fr) 38px 32px 28px;
+    gap: 4px;
+    padding: 0 5px;
+  }
+
+  .nfl-division-row {
+    height: 14px;
+    grid-template-columns: 28px minmax(0, 1fr) 34px 28px;
+    gap: 3px;
+    padding: 0 4px;
   }
 
   .nfl-news-row {
