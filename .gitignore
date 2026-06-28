@@ -15,5 +15,6 @@ backups/
 web/node_modules/
 web/dist/
 web/.tools/
+web/.edge-*-profile/
 web/f1-800x480.png
 pi-nashtrack.png

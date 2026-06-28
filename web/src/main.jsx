@@ -343,7 +343,12 @@ async function fetchGameDetail(sport, league, eventId) {
       const abbr = str(t.team?.abbreviation);
       if (!abbr) return;
       const sm = {};
-      (t.statistics || []).forEach((s) => { sm[str(s.name)] = str(s.displayValue); });
+      const all = (t.statistics || []).map((s) => ({
+        name: str(s.name),
+        label: str(s.shortDisplayName || s.displayName || s.name),
+        value: str(s.displayValue),
+      })).filter((s) => s.name && s.value);
+      all.forEach((s) => { sm[s.name] = s.value; });
       teamStats[abbr] = {
         pts:      sm.points || sm.totalPoints || "",
         fgPct:    sm.fieldGoalPct || "",
@@ -351,6 +356,7 @@ async function fetchGameDetail(sport, league, eventId) {
         reb:      sm.totalRebounds || "",
         ast:      sm.assists || "",
         to:       sm.turnovers || "",
+        all,
       };
     });
 
@@ -397,6 +403,26 @@ async function fetchGameDetail(sport, league, eventId) {
       videos,
     };
   } catch { return null; }
+}
+
+function normalizeFootballSituation(raw, competitors = []) {
+  if (!raw) return null;
+  const str = (v) => (v == null || typeof v === "object" ? "" : String(v));
+  const possessionId = str(raw.possession || raw.possessionTeam?.id);
+  const possession = competitors.find((c) => String(c.team?.id) === possessionId);
+  const downDistance = str(raw.shortDownDistanceText || raw.downDistanceText || raw.downDistance || raw.description);
+  const yardsToEndzone = Number(raw.yardsToEndzone ?? NaN);
+  const fieldYardLine = Number(raw.yardLine ?? NaN);
+  const displayYardLine = Number.isFinite(yardsToEndzone) ? yardsToEndzone : fieldYardLine;
+  const isRedZone = !!raw.isRedZone || (Number.isFinite(yardsToEndzone) && yardsToEndzone > 0 && yardsToEndzone <= 20);
+  return {
+    possession: possession?.team?.abbreviation || str(raw.possessionText),
+    down: raw.down,
+    distance: raw.distance,
+    yardLine: Number.isFinite(displayYardLine) ? displayYardLine : null,
+    text: downDistance,
+    isRedZone,
+  };
 }
 
 function parseESPNEvent(event, leagueShort, tone, sport, league) {
@@ -453,6 +479,7 @@ function parseESPNEvent(event, leagueShort, tone, sport, league) {
     state,
     progress,
     date: comp.date || event.date || "",
+    situation: leagueShort === "NFL" ? normalizeFootballSituation(comp.situation || event.situation, competitors) : null,
   };
 }
 
@@ -1642,6 +1669,500 @@ function F1CommandView({ onUpdated, onNextRefresh }) {
       />
       <HaloF1SeasonRail meetings={meetings} activeMeeting={context.meeting} nowMs={nowMs} />
     </main>
+  );
+}
+
+// --- NFL RedZone-style command view -----------------------------------------
+
+const NFL_PANEL_TABS = [
+  { key: "center", label: "Game" },
+  { key: "players", label: "Players" },
+  { key: "injuries", label: "Injuries" },
+  { key: "teams", label: "Teams" },
+  { key: "news", label: "News" },
+];
+
+function nflFavoriteTags() {
+  return new Set(favorites.filter((team) => team.meta === "NFL").map((team) => team.tag));
+}
+
+function nflIsFavoriteGame(game) {
+  const tags = nflFavoriteTags();
+  return tags.has(game.away) || tags.has(game.home);
+}
+
+function nflScoreMargin(game) {
+  const away = Number(game.awayScore);
+  const home = Number(game.homeScore);
+  return Number.isFinite(away) && Number.isFinite(home) ? Math.abs(away - home) : 99;
+}
+
+function nflSituationLabel(game) {
+  const s = game?.situation;
+  if (!s) return game?.status || "Scheduled";
+  const chunks = [];
+  if (s.possession) chunks.push(`${s.possession} ball`);
+  if (s.text) chunks.push(s.text);
+  if (s.yardLine != null) chunks.push(s.isRedZone ? `RZ ${s.yardLine}` : `YL ${s.yardLine}`);
+  return chunks.join(" - ") || game.status || "Scheduled";
+}
+
+function nflGameTone(game) {
+  if (game?.isLive && game?.situation?.isRedZone) return "red zone";
+  if (game?.isLive && nflScoreMargin(game) <= 8) return "one score";
+  if (game?.isLive) return "live";
+  if (game?.state === "post") return "final";
+  const ms = new Date(game?.date || 0).getTime() - Date.now();
+  if (ms > 0 && ms <= 30 * 60_000) return "next up";
+  return "scheduled";
+}
+
+function nflRankGame(game) {
+  const ms = new Date(game.date || 0).getTime() - Date.now();
+  const favoriteBoost = nflIsFavoriteGame(game) ? -12 : 0;
+  if (game.isLive && game.situation?.isRedZone) return -100 + favoriteBoost;
+  if (game.isLive && nflScoreMargin(game) <= 8) return -80 + nflScoreMargin(game) + favoriteBoost;
+  if (game.isLive) return -60 + favoriteBoost;
+  if (game.state === "pre") return Math.max(0, ms / 60_000) + favoriteBoost;
+  return 500 + Math.abs(ms / 60_000);
+}
+
+function nflSortGames(games) {
+  return [...games].sort((a, b) => nflRankGame(a) - nflRankGame(b));
+}
+
+function nflRefreshMs(games) {
+  if (games.some((game) => game.isLive)) return 30_000;
+  const soon = games.some((game) => {
+    const ms = new Date(game.date || 0).getTime() - Date.now();
+    return ms > -15 * 60_000 && ms < 30 * 60_000;
+  });
+  return soon ? 60_000 : 5 * 60_000;
+}
+
+function nflBuildAlerts(games, selectedGame) {
+  const alerts = [];
+  nflSortGames(games).forEach((game) => {
+    if (alerts.length >= 5) return;
+    const matchup = `${game.away} @ ${game.home}`;
+    if (game.isLive && game.situation?.isRedZone) {
+      alerts.push({ tag: "RZ", text: `${matchup} - ${nflSituationLabel(game)}` });
+    } else if (game.isLive && nflScoreMargin(game) <= 8) {
+      alerts.push({ tag: "1S", text: `${matchup} - one-score game` });
+    } else if (game.state === "post") {
+      alerts.push({ tag: "FIN", text: `${matchup} final ${game.awayScore}-${game.homeScore}` });
+    } else if (nflIsFavoriteGame(game)) {
+      alerts.push({ tag: "FAV", text: `${matchup} - ${formatCountdown(game.date)}` });
+    }
+  });
+  if (!alerts.length && selectedGame) {
+    alerts.push({ tag: "NEXT", text: `${selectedGame.away} @ ${selectedGame.home} - ${formatGameTime(selectedGame.date)}` });
+  }
+  return alerts;
+}
+
+function NFLHero({ games, selectedGame }) {
+  const live = games.filter((game) => game.isLive);
+  const redZone = live.filter((game) => game.situation?.isRedZone);
+  const oneScore = live.filter((game) => nflScoreMargin(game) <= 8);
+  const alerts = nflBuildAlerts(games, selectedGame);
+  return (
+    <section className="panel nfl-hero-panel">
+      <div className="nfl-hero-copy">
+        <div className="nfl-eyebrow">
+          <span>NFL</span>
+          <b>REDZONE COMMAND</b>
+          <em>{games.length} games</em>
+        </div>
+        <h2>{redZone.length ? `${redZone.length} in the red zone` : live.length ? `${live.length} live now` : "NFL slate ready"}</h2>
+        <p>{oneScore.length ? `${oneScore.length} one-score games` : selectedGame ? `${selectedGame.away} @ ${selectedGame.home} selected` : "Scores, injuries, players, team stats, and news"}</p>
+      </div>
+      <div className="nfl-alert-rail">
+        {alerts.map((alert, index) => (
+          <div className="nfl-alert-row" key={`${alert.tag}-${index}`}>
+            <span>{alert.tag}</span>
+            <strong>{alert.text}</strong>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function NFLGameCard({ game, selected, onSelect }) {
+  const tone = nflGameTone(game);
+  return (
+    <button className={`nfl-game-card${selected ? " active" : ""}`} onClick={() => onSelect(game.id)}>
+      <div className="nfl-card-top">
+        <span className={`nfl-status-chip ${tone.replace(/\s+/g, "-")}`}>{tone}</span>
+        <em>{game.isLive || game.state === "post" ? game.status : formatGameTime(game.date)}</em>
+      </div>
+      <div className="nfl-card-score">
+        <div className="nfl-card-team">
+          <TeamMark label={game.away} logo={game.awayLogo} tone="green" size="sm" />
+          <strong>{game.away}</strong>
+          <b className={game.awayWinning ? "winning" : ""}>{game.awayScore}</b>
+        </div>
+        <div className="nfl-card-team">
+          <TeamMark label={game.home} logo={game.homeLogo} tone="green" size="sm" />
+          <strong>{game.home}</strong>
+          <b className={game.homeWinning ? "winning" : ""}>{game.homeScore}</b>
+        </div>
+      </div>
+      <p>{game.isLive ? nflSituationLabel(game) : game.state === "post" ? "Final" : formatCountdown(game.date)}</p>
+    </button>
+  );
+}
+
+function NFLSlate({ games, selectedId, setSelectedId, loading }) {
+  if (loading) {
+    return (
+      <section className="panel nfl-slate-panel">
+        <div className="nfl-slate-grid">
+          {[...Array(8)].map((_, index) => <div className="loading-pulse" key={index} />)}
+        </div>
+      </section>
+    );
+  }
+  if (!games.length) {
+    return (
+      <section className="panel nfl-slate-panel">
+        <p className="gcal-empty">No NFL scoreboard data returned</p>
+      </section>
+    );
+  }
+  return (
+    <section className="panel nfl-slate-panel">
+      <div className="nfl-slate-grid">
+        {games.slice(0, 10).map((game) => (
+          <NFLGameCard
+            game={game}
+            key={game.id}
+            selected={game.id === selectedId}
+            onSelect={setSelectedId}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function NFLRecentPlays({ plays }) {
+  if (!plays?.length) return <p className="gcal-empty">Recent plays unavailable</p>;
+  return (
+    <div className="nfl-play-list">
+      {plays.slice(0, 5).map((play, index) => (
+        <div className={`nfl-play-row${play.scoring ? " scoring" : ""}`} key={index}>
+          <span>{play.period ? `Q${play.period}` : "--"} {play.clock || ""}</span>
+          <strong>{play.text || "Play update unavailable"}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function nflTeamStatRows(detail, game) {
+  const away = detail?.teamStats?.[game?.away]?.all || [];
+  const home = detail?.teamStats?.[game?.home]?.all || [];
+  const labels = ["totalYards", "netPassingYards", "rushingYards", "turnovers", "firstDowns", "thirdDownEff", "possessionTime"];
+  const byName = (rows) => Object.fromEntries(rows.map((row) => [row.name, row]));
+  const awayMap = byName(away);
+  const homeMap = byName(home);
+  return labels.map((name) => ({
+    key: name,
+    label: awayMap[name]?.label || homeMap[name]?.label || name,
+    away: awayMap[name]?.value || "",
+    home: homeMap[name]?.value || "",
+  })).filter((row) => row.away || row.home).slice(0, 7);
+}
+
+function NFLTeamStats({ detail, game }) {
+  if (!game) return <p className="gcal-empty">Select an NFL game</p>;
+  const rows = nflTeamStatRows(detail, game);
+  if (!rows.length) return <p className="gcal-empty">Team stats unavailable</p>;
+  return (
+    <div className="nfl-team-stats">
+      <div className="nfl-team-stats-head">
+        <span>{game.away}</span>
+        <strong>TEAM STATS</strong>
+        <span>{game.home}</span>
+      </div>
+      {rows.map((row) => (
+        <div className="nfl-team-stat-row" key={row.key}>
+          <b>{row.away || "--"}</b>
+          <span>{row.label}</span>
+          <b>{row.home || "--"}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NFLGameCenter({ game, detail, loading, onOpenModal }) {
+  if (!game) return <p className="gcal-empty">Select an NFL game</p>;
+  const hasOdds = detail && (detail.spread || detail.overUnder || detail.awayML || detail.homeML);
+  return (
+    <div className="nfl-center-grid">
+      <div className="nfl-matchup-card">
+        <div className="nfl-matchup-score">
+          <div>
+            <TeamMark label={game.away} logo={game.awayLogo} tone="green" size="md" />
+            <strong>{game.away}</strong>
+            {game.awayRecord && <span>{game.awayRecord}</span>}
+          </div>
+          <b>{game.awayScore} - {game.homeScore}</b>
+          <div>
+            <TeamMark label={game.home} logo={game.homeLogo} tone="green" size="md" />
+            <strong>{game.home}</strong>
+            {game.homeRecord && <span>{game.homeRecord}</span>}
+          </div>
+        </div>
+        <p>{game.isLive ? nflSituationLabel(game) : game.state === "post" ? game.status : formatGameTime(game.date)}</p>
+        {detail?.venue && <span>{detail.venue}{detail.city ? ` - ${detail.city}` : ""}</span>}
+        {detail?.broadcast && <span>{detail.broadcast}</span>}
+        {hasOdds && (
+          <div className="nfl-odds-row">
+            {detail.spread && <small>Spread {detail.spread}</small>}
+            {detail.overUnder && <small>O/U {detail.overUnder}</small>}
+            {detail.awayML && <small>{game.away} {detail.awayML}</small>}
+            {detail.homeML && <small>{game.home} {detail.homeML}</small>}
+          </div>
+        )}
+        <button className="nfl-open-btn" onClick={onOpenModal}>Full game view</button>
+      </div>
+      <div className="nfl-detail-stack">
+        {loading && !detail ? (
+          <>
+            <div className="loading-pulse" />
+            <div className="loading-pulse" />
+          </>
+        ) : (
+          <>
+            {detail?.winProb && (
+              <WinProbBar away={detail.winProb.away} home={detail.winProb.home} awayAbbr={game.away} homeAbbr={game.home} toneColor="var(--green)" />
+            )}
+            <NFLRecentPlays plays={detail?.plays || []} />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NFLPlayers({ game, detail, loading }) {
+  if (loading && !detail) return <div className="loading-pulse" />;
+  const leaders = detail?.leaders || [];
+  const awayRoster = detail?.rosters?.[game?.away] || {};
+  const homeRoster = detail?.rosters?.[game?.home] || {};
+  const starters = [
+    ...(awayRoster.starters || []).slice(0, 6).map((player) => ({ ...player, team: game.away })),
+    ...(homeRoster.starters || []).slice(0, 6).map((player) => ({ ...player, team: game.home })),
+  ];
+  return (
+    <div className="nfl-players-grid">
+      <div className="nfl-leaders-list">
+        <span className="nfl-mini-label">GAME LEADERS</span>
+        {leaders.length ? leaders.slice(0, 6).map((leader, index) => (
+          <div className="nfl-leader-row" key={index}>
+            <b>{leader.stat}</b>
+            <strong>{leader.name}</strong>
+            <span>{leader.category} - {leader.team}</span>
+          </div>
+        )) : <p className="gcal-empty">Leaders unavailable</p>}
+      </div>
+      <div className="nfl-roster-list">
+        <span className="nfl-mini-label">PLAYER WATCH</span>
+        {starters.length ? starters.map((player, index) => (
+          <div className="nfl-player-row" key={`${player.team}-${player.name}-${index}`}>
+            <span>{player.team}</span>
+            <strong>{player.name}</strong>
+            <em>{player.position || "--"} {player.jersey ? `#${player.jersey}` : ""}</em>
+          </div>
+        )) : <p className="gcal-empty">Roster feed unavailable</p>}
+      </div>
+    </div>
+  );
+}
+
+function NFLInjuries({ detail, loading }) {
+  if (loading && !detail) return <div className="loading-pulse" />;
+  const injuries = detail?.injuries || [];
+  if (!injuries.length) return <p className="gcal-empty">No injuries listed for the selected matchup</p>;
+  return (
+    <div className="nfl-injury-board">
+      {injuries.slice(0, 12).map((injury, index) => (
+        <div className="nfl-injury-row" key={`${injury.name}-${index}`}>
+          <span>{injury.team}</span>
+          <strong>{injury.name}</strong>
+          <em>{injury.pos || "--"}</em>
+          <b>{injury.status || injury.type || "Listed"}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NFLTeams({ game, detail, loading }) {
+  if (!game) return <p className="gcal-empty">Select an NFL game</p>;
+  if (loading && !detail) return <div className="loading-pulse" />;
+  const awayLeaders = detail?.teamLeaders?.[game?.away] || [];
+  const homeLeaders = detail?.teamLeaders?.[game?.home] || [];
+  return (
+    <div className="nfl-teams-grid">
+      <NFLTeamStats detail={detail} game={game} />
+      <div className="nfl-team-leaders">
+        {[{ abbr: game?.away, list: awayLeaders }, { abbr: game?.home, list: homeLeaders }].map(({ abbr, list }) => (
+          <div className="nfl-team-leader-col" key={abbr}>
+            <span className="nfl-mini-label">{abbr} LEADERS</span>
+            {list.length ? list.slice(0, 4).map((leader, index) => (
+              <div className="nfl-leader-row" key={index}>
+                <b>{leader.stat}</b>
+                <strong>{leader.name}</strong>
+                <span>{leader.category}</span>
+              </div>
+            )) : <p className="gcal-empty">Unavailable</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function NFLNews({ articles }) {
+  if (!articles.length) return <p className="gcal-empty">No NFL headlines returned</p>;
+  return (
+    <div className="nfl-news-list">
+      {articles.slice(0, 6).map((article, index) => (
+        <button
+          className="nfl-news-row"
+          key={article.id || article.headline || index}
+          onClick={() => article.links?.web?.href && window.open(article.links.web.href, "_blank")}
+        >
+          <strong>{article.headline || article.title || "NFL headline"}</strong>
+          <span>{article.categories?.[0]?.description || article.type || "ESPN NFL"}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function NFLDataPanel({ activePanel, setActivePanel, game, detail, loading, news, onOpenModal }) {
+  return (
+    <section className="panel nfl-data-panel">
+      <div className="nfl-data-tabs">
+        {NFL_PANEL_TABS.map((tab) => (
+          <button key={tab.key} className={activePanel === tab.key ? "active" : ""} onClick={() => setActivePanel(tab.key)}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div className="nfl-data-body">
+        {activePanel === "center" && <NFLGameCenter game={game} detail={detail} loading={loading} onOpenModal={onOpenModal} />}
+        {activePanel === "players" && <NFLPlayers game={game} detail={detail} loading={loading} />}
+        {activePanel === "injuries" && <NFLInjuries detail={detail} loading={loading} />}
+        {activePanel === "teams" && <NFLTeams game={game} detail={detail} loading={loading} />}
+        {activePanel === "news" && <NFLNews articles={news} />}
+      </div>
+    </section>
+  );
+}
+
+function NFLCommandView({ onUpdated, onNextRefresh }) {
+  const [games, setGames] = useState([]);
+  const [news, setNews] = useState([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [selectedDetail, setSelectedDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [activePanel, setActivePanel] = useState("center");
+  const [modalGame, setModalGame] = useState(null);
+  const loadRef = useRef(null);
+
+  const selectedGame = games.find((game) => game.id === selectedId) || games[0] || null;
+
+  loadRef.current = async function loadNFLCommandView() {
+    const [scoreboard, headlines] = await Promise.all([
+      fetchScoreboard("football", "nfl"),
+      fetchNews("football", "nfl"),
+    ]);
+    const normalized = nflSortGames(scoreboard.map((event) => parseESPNEvent(event, "NFL", "green", "football", "nfl")));
+    setGames(normalized);
+    setNews(headlines);
+    setSelectedId((prev) => normalized.some((game) => game.id === prev) ? prev : (normalized[0]?.id || ""));
+    setError(normalized.length ? "" : "No NFL scoreboard returned.");
+    setLoading(false);
+    const refreshMs = nflRefreshMs(normalized);
+    const now = new Date();
+    onUpdated?.(now);
+    onNextRefresh?.(new Date(Date.now() + refreshMs));
+    return refreshMs;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    let timerId;
+    async function run() {
+      try {
+        const ms = await loadRef.current();
+        if (!cancelled) timerId = setTimeout(run, ms);
+      } catch (err) {
+        if (!cancelled) {
+          setError(`Failed to load NFL command view: ${err.message}`);
+          setLoading(false);
+          timerId = setTimeout(run, 5 * 60_000);
+        }
+      }
+    }
+    run();
+    return () => { cancelled = true; clearTimeout(timerId); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!selectedGame?.id) {
+      setSelectedDetail(null);
+      return;
+    }
+    let cancelled = false;
+    let timerId;
+    async function loadDetail() {
+      setDetailLoading(true);
+      try {
+        const detail = await fetchGameDetail(selectedGame.sport, selectedGame.league, selectedGame.id);
+        if (!cancelled) setSelectedDetail(detail);
+      } finally {
+        if (!cancelled) {
+          setDetailLoading(false);
+          timerId = setTimeout(loadDetail, selectedGame.isLive ? 30_000 : 5 * 60_000);
+        }
+      }
+    }
+    loadDetail();
+    return () => { cancelled = true; clearTimeout(timerId); };
+  }, [selectedGame?.id, selectedGame?.isLive]);
+
+  return (
+    <>
+      {modalGame && (
+        <ModalErrorBoundary onClose={() => setModalGame(null)}>
+          <GameDetailModal game={modalGame} onClose={() => setModalGame(null)} />
+        </ModalErrorBoundary>
+      )}
+      <main className="nfl-view">
+        <NFLHero games={games} selectedGame={selectedGame} />
+        {error && <div className="halo-f1-feed-note">{error}</div>}
+        <NFLSlate games={games} selectedId={selectedGame?.id || selectedId} setSelectedId={setSelectedId} loading={loading} />
+        <NFLDataPanel
+          activePanel={activePanel}
+          setActivePanel={setActivePanel}
+          game={selectedGame}
+          detail={selectedDetail}
+          loading={detailLoading}
+          news={news}
+          onOpenModal={() => selectedGame && setModalGame(selectedGame)}
+        />
+      </main>
+    </>
   );
 }
 
@@ -3472,6 +3993,8 @@ function App() {
           <F1ErrorBoundary>
             <F1CommandView onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} />
           </F1ErrorBoundary>
+        ) : activeView === "football" ? (
+          <NFLCommandView onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} />
         ) : (
           <Dashboard
             onUpdated={setLastUpdated}

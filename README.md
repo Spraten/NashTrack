@@ -17,7 +17,7 @@ NashTrack is a compact sports command center built for an 800x480 Raspberry Pi t
 
 Goal: rebuild the Football tab into an NFL command center that feels useful on game day and deep enough for normal sports-fan browsing during the week.
 
-- [ ] **RedZone Live View**
+- [x] **RedZone Live View**
   - Sunday slate sorted by urgency: live, red zone, close game, scoring drive, favorite teams.
   - Game cards with score, quarter, clock, possession, down/distance, yard line, and last play.
   - Alert rail for touchdowns, turnovers, red-zone trips, final scores, and favorite-team moments.
@@ -62,11 +62,13 @@ Goal: rebuild the Football tab into an NFL command center that feels useful on g
 
 ### NFL Implementation Plan
 
-- [ ] Phase 1: build the RedZone Live command view for the Football tab.
+- [x] Phase 1: build the RedZone Live command view for the Football tab.
 - [ ] Phase 2: reuse and expand the existing game detail modal into an NFL Game Center.
 - [ ] Phase 3: add Injuries, Players, Teams, News, and Standings segmented panels.
-- [ ] Phase 4: add favorite-team priority sorting and alert logic.
+- [x] Phase 4: add favorite-team priority sorting and alert logic.
 - [ ] Phase 5: verify the full NFL flow on the Raspberry Pi at 800x480.
+
+First pass added: Football tab command view, urgency-sorted slate, red-zone/one-score/favorite alerts, selected-game panels for Game, Players, Injuries, Teams, and News, and adaptive refresh timing.
 
 ### NFL Data Notes
 
