@@ -9,6 +9,8 @@ NashTrack is a compact sports command center built for an 800x480 Raspberry Pi t
 - [x] Raspberry Pi Chromium fullscreen launch support.
 - [x] Settings update button that pulls the GitHub repo through the local updater service.
 - [x] Settings display mode for Raspberry Pi screen sleep after 3 minutes or always-on mode.
+- [x] Settings launch-at-startup controls for the Raspberry Pi desktop session.
+- [x] Dashboard live-score ticker, calendar-forward layout, cycling headline rail, and broadcast/service chips.
 - [x] Direct hash routes for tabs, such as `#f1`.
 - [x] Halo-style F1 command view with current/next session, weekend stack, standings, results, news, track weather, season rail, and no-spoiler mode.
 
@@ -91,10 +93,18 @@ Third pass added: redesigned full-game popup as a compact Game Center with match
 
 ## Future Sport Command Views
 
-- [ ] NBA courtside command view: live slate, standings, leaders, injuries/news, team/player detail.
+- [x] NBA courtside command view: live slate, cycling ticker, news rail, and reusable game detail.
 - [ ] MLB dugout command view: inning state, probable pitchers, standings, team/player detail.
 - [ ] NHL rink command view: live game state, standings, goalie/team stats, injuries/news.
-- [ ] Soccer matchday command view: fixtures, live clocks, tables, team/player detail, news.
+- [x] Soccer matchday command view: fixtures, live clocks, cycling ticker, news rail, and reusable game detail.
+
+## Additional Planned Tweaks
+
+- [ ] Favorite-team setup UI instead of the current static starter list.
+- [ ] Team-specific headline filtering for Favorites, Football, Basketball, and Soccer.
+- [ ] Persistent preferred sports/leagues for the all-sports dashboard.
+- [ ] Better TV/service mapping as feeds expose more streaming detail.
+- [ ] Pi health panel: network status, uptime, display mode, app version, and last update result.
 
 ## Local Run
 
@@ -103,3 +113,9 @@ python main.py
 ```
 
 Use `python main.py --no-open` to start the web server without opening a browser window, or `python main.py --kivy` to run the older Kivy UI.
+
+On the Raspberry Pi, launch-at-startup can be enabled in Settings or installed manually:
+
+```bash
+bash scripts/pi/install-autostart.sh
+```

@@ -93,10 +93,19 @@ const SCREEN_SLEEP_MS = 3 * 60_000;
 function loadNashSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(NASH_SETTINGS_KEY) || "{}");
-    return { screenMode: DEFAULT_SCREEN_MODE, ...saved };
+    return { screenMode: DEFAULT_SCREEN_MODE, headlineCycling: true, ...saved };
   } catch {
-    return { screenMode: DEFAULT_SCREEN_MODE };
+    return { screenMode: DEFAULT_SCREEN_MODE, headlineCycling: true };
   }
+}
+
+async function getLocalService(path) {
+  const response = await fetch(`${DISPLAY_SERVICE_URL}${path}`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.message || `Local service failed with HTTP ${response.status}`);
+  }
+  return data;
 }
 
 async function postDisplayService(path, payload) {
@@ -261,6 +270,76 @@ const ESPN_WEB_BASE = "https://site.web.api.espn.com/apis/v2/sports";
 
 function espnText(value) {
   return value == null || typeof value === "object" ? "" : String(value);
+}
+
+const BROADCAST_PATTERNS = [
+  { re: /espn\+|espn plus/i, label: "ESPN+", iconKey: "espn" },
+  { re: /^espn\b|espn2|espnu|espn deportes/i, label: "ESPN", iconKey: "espn" },
+  { re: /\babc\b/i, label: "ABC", iconKey: "abc" },
+  { re: /\bfox\b|fs1|fs2/i, label: "FOX", iconKey: "fox" },
+  { re: /\bcbs\b/i, label: "CBS", iconKey: "cbs" },
+  { re: /\bnbc\b/i, label: "NBC", iconKey: "nbc" },
+  { re: /\btnt\b/i, label: "TNT", iconKey: "tnt" },
+  { re: /nfl network|nfln/i, label: "NFLN", iconKey: "nfln" },
+  { re: /prime|amazon/i, label: "Prime", iconKey: "prime" },
+  { re: /peacock/i, label: "Peacock", iconKey: "peacock" },
+  { re: /apple/i, label: "Apple TV", iconKey: "apple" },
+];
+
+function normalizeBroadcastLabel(value) {
+  const raw = espnText(value).trim();
+  if (!raw) return null;
+  const matched = BROADCAST_PATTERNS.find((item) => item.re.test(raw));
+  if (matched) return matched;
+  return {
+    label: raw.replace(/\s+Network$/i, "").slice(0, 12),
+    iconKey: "tv",
+  };
+}
+
+function collectBroadcastLabels(source, out = []) {
+  if (!source) return out;
+  if (typeof source === "string") {
+    out.push(source);
+    return out;
+  }
+  if (Array.isArray(source)) {
+    source.forEach((item) => collectBroadcastLabels(item, out));
+    return out;
+  }
+  if (typeof source !== "object") return out;
+
+  [
+    source.shortName,
+    source.name,
+    source.displayName,
+    source.label,
+    source.callLetters,
+    source.media?.shortName,
+    source.media?.name,
+  ].forEach((value) => value && out.push(value));
+  collectBroadcastLabels(source.names, out);
+  return out;
+}
+
+function normalizeBroadcasts(...sources) {
+  const labels = [];
+  sources.forEach((source) => collectBroadcastLabels(source, labels));
+  const seen = new Set();
+  return labels
+    .map(normalizeBroadcastLabel)
+    .filter(Boolean)
+    .filter((chip) => {
+      const key = chip.label.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 3);
+}
+
+function gameBroadcasts(game, detail) {
+  return normalizeBroadcasts(detail?.broadcasts, detail?.broadcast, game?.broadcasts);
 }
 
 async function fetchESPNJson(url) {
@@ -518,10 +597,13 @@ async function fetchGameDetail(sport, league, eventId) {
       linescore[abbr] = (competitor.linescores || []).map((line) => str(line.displayValue ?? line.value));
     });
 
+    const broadcasts = normalizeBroadcasts(comp.broadcasts, comp.geoBroadcasts);
+
     return {
       venue: str(venue.fullName),
       city: [addr.city, addr.state].filter(Boolean).map(str).join(", "),
-      broadcast: str(comp.broadcasts?.[0]?.media?.shortName) || str(comp.broadcasts?.[0]?.names?.[0]),
+      broadcast: broadcasts[0]?.label || str(comp.broadcasts?.[0]?.media?.shortName) || str(comp.broadcasts?.[0]?.names?.[0]),
+      broadcasts,
       spread,
       overUnder,
       awayML: formatML(awayML),
@@ -815,6 +897,7 @@ function parseESPNEvent(event, leagueShort, tone, sport, league) {
     awayWinning: awayWinning || awayWon,
     homeWinning: homeWinning || homeWon,
     status: status.type?.shortDetail || "Upcoming",
+    broadcasts: normalizeBroadcasts(comp.broadcasts, comp.geoBroadcasts),
     isLive,
     state,
     progress,
@@ -874,6 +957,7 @@ async function fetchF1(year) {
           awayWinning: false,
           homeWinning: false,
           status: isLive ? `Live · ${s.session_name}` : isPost ? s.session_name : s.session_name,
+          broadcasts: [],
           isLive,
           state: isLive ? "in" : isPost ? "post" : "pre",
           progress: isLive ? 50 : isPost ? 100 : 0,
@@ -947,6 +1031,103 @@ function TeamMark({ label, logo, tone, size = "md" }) {
         ? <img src={logo} alt={label} className="team-logo" onError={() => setImgOk(false)} />
         : <span className="team-abbrev">{label}</span>}
     </div>
+  );
+}
+
+function BroadcastChips({ broadcasts, compact = false }) {
+  const chips = normalizeBroadcasts(broadcasts);
+  if (!chips.length) return null;
+  return (
+    <div className={`broadcast-chips${compact ? " compact" : ""}`}>
+      {chips.map((chip) => (
+        <span className={`broadcast-chip ${chip.iconKey}`} key={chip.label}>{chip.label}</span>
+      ))}
+    </div>
+  );
+}
+
+function gameDisplayName(game) {
+  if (!game) return "";
+  if (game.leagueShort === "F1") return `${game.meetingName || "F1"} - ${game.home || "Session"}`;
+  return `${game.away} @ ${game.home}`;
+}
+
+function gameStatusBadge(game) {
+  if (!game) return "SOON";
+  if (game.leagueShort === "NFL" && game.isLive && game.situation?.isRedZone) return "RED ZONE";
+  if (game.isLive && Number.isFinite(Number(game.awayScore)) && Number.isFinite(Number(game.homeScore))) {
+    const diff = Math.abs(Number(game.awayScore) - Number(game.homeScore));
+    if (diff <= 3) return "CLOSE";
+  }
+  if (game.isLive) return "LIVE";
+  if (game.state === "post") return "FINAL";
+  return "SOON";
+}
+
+function tickerGames(games) {
+  const live = games.filter((game) => game.isLive);
+  if (live.length) return live;
+  const upcoming = games
+    .filter((game) => game.state !== "post")
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(0, 3);
+  if (upcoming.length) return upcoming;
+  return games.filter((game) => game.state === "post").slice(0, 3);
+}
+
+function LiveScoreTicker({ games, title = "Live Scores", onSelectGame }) {
+  const items = tickerGames(games);
+  const [index, setIndex] = useState(0);
+  const game = items[index % Math.max(items.length, 1)];
+
+  useEffect(() => {
+    setIndex(0);
+  }, [items.map((item) => item.id).join("|")]);
+
+  useEffect(() => {
+    if (items.length <= 1) return undefined;
+    const timer = setInterval(() => setIndex((value) => (value + 1) % items.length), 6000);
+    return () => clearInterval(timer);
+  }, [items.length]);
+
+  if (!game) {
+    return (
+      <section className="panel live-score-ticker empty">
+        <div className="ticker-title"><h2>{title}</h2><span>Standby</span></div>
+        <p>No active or upcoming games in the feed.</p>
+      </section>
+    );
+  }
+
+  const badge = gameStatusBadge(game);
+  const isF1 = game.leagueShort === "F1";
+  return (
+    <section
+      className={`panel live-score-ticker ${game.tone || ""}${onSelectGame ? " clickable" : ""}`}
+      onClick={() => onSelectGame?.(game)}
+    >
+      <div className="ticker-title">
+        <h2>{title}</h2>
+        <span>{items.length > 1 ? `${(index % items.length) + 1}/${items.length}` : game.leagueShort}</span>
+      </div>
+      <div className="ticker-main">
+        <span className={`ticker-badge ${badge.toLowerCase().replace(/\s+/g, "-")}`}>{badge}</span>
+        <div className="ticker-copy">
+          <strong>{gameDisplayName(game)}</strong>
+          <span>{game.isLive || game.state === "post" ? game.status : formatGameTime(game.date)}</span>
+        </div>
+        {isF1 ? (
+          <b className="ticker-score">{game.state === "post" ? "DONE" : formatCountdown(game.date)}</b>
+        ) : (
+          <div className="ticker-score">
+            <b className={game.awayWinning ? "winning" : ""}>{game.awayScore}</b>
+            <i>-</i>
+            <b className={game.homeWinning ? "winning" : ""}>{game.homeScore}</b>
+          </div>
+        )}
+      </div>
+      <BroadcastChips broadcasts={game.broadcasts} compact />
+    </section>
   );
 }
 
@@ -2151,6 +2332,7 @@ function NFLGameCard({ game, selected, onSelect }) {
         </div>
       </div>
       <p>{game.isLive ? nflSituationLabel(game) : game.state === "post" ? "Final" : formatCountdown(game.date)}</p>
+      <BroadcastChips broadcasts={game.broadcasts} compact />
     </button>
   );
 }
@@ -2287,7 +2469,7 @@ function NFLGameCenter({ game, detail, loading, onOpenModal }) {
         </div>
         <p>{game.isLive ? nflSituationLabel(game) : game.state === "post" ? game.status : formatGameTime(game.date)}</p>
         {detail?.venue && <span>{detail.venue}{detail.city ? ` - ${detail.city}` : ""}</span>}
-        {detail?.broadcast && <span>{detail.broadcast}</span>}
+        <BroadcastChips broadcasts={gameBroadcasts(game, detail)} compact />
         {hasOdds && (
           <div className="nfl-odds-row">
             {detail.spread && <small>Spread {detail.spread}</small>}
@@ -2689,6 +2871,7 @@ function NFLCommandView({ onUpdated, onNextRefresh }) {
       )}
       <main className="nfl-view">
         <NFLHero games={games} selectedGame={selectedGame} />
+        <LiveScoreTicker games={games} title="NFL Live" onSelectGame={(game) => setSelectedId(game.id)} />
         {error && <div className="halo-f1-feed-note">{error}</div>}
         <NFLSlate games={games} selectedId={selectedGame?.id || selectedId} setSelectedId={setSelectedId} loading={loading} />
         <NFLDataPanel
@@ -2985,7 +3168,10 @@ function LiveCard({ game, onClick, lastUpdated }) {
         <span>{game.home}</span>
       </div>
       <div className="meter"><span style={{ width: `${game.progress}%` }} /></div>
-      {ago && <span className="card-updated">Updated {ago}</span>}
+      <div className="card-bottom-row">
+        <BroadcastChips broadcasts={game.broadcasts} compact />
+        {ago && <span className="card-updated">Updated {ago}</span>}
+      </div>
     </article>
   );
 }
@@ -3006,6 +3192,7 @@ function SoonCard({ item, onClick }) {
       <strong>{isF1 ? item.meetingName : `${item.away} vs ${item.home}`}</strong>
       <p>{formatGameTime(item.date)}</p>
       <b>{formatCountdown(item.date)}</b>
+      <BroadcastChips broadcasts={item.broadcasts} compact />
     </article>
   );
 }
@@ -3330,10 +3517,10 @@ function GameCenterEmpty({ children }) {
 function GameCenterInfo({ game, detail }) {
   const rows = [
     detail?.venue ? { icon: "mapPin", label: detail.city ? `${detail.venue} - ${detail.city}` : detail.venue } : null,
-    detail?.broadcast ? { icon: "tv", label: detail.broadcast } : null,
     !detail?.venue && game.date ? { icon: "calendar", label: formatGameTime(game.date) } : null,
   ].filter(Boolean);
-  if (!rows.length) return null;
+  const broadcasts = gameBroadcasts(game, detail);
+  if (!rows.length && !broadcasts.length) return null;
   return (
     <div className="gc-info-list">
       {rows.map((row, index) => (
@@ -3342,6 +3529,7 @@ function GameCenterInfo({ game, detail }) {
           <span>{row.label}</span>
         </div>
       ))}
+      <BroadcastChips broadcasts={broadcasts} compact />
     </div>
   );
 }
@@ -3981,12 +4169,7 @@ function GameDetailModal({ game, onClose }) {
                           <span>{detail.venue}{detail.city ? ` · ${detail.city}` : ""}</span>
                         </div>
                       )}
-                      {detail.broadcast && (
-                        <div className="modal-meta-row">
-                          <Icon name="tv" size={13} />
-                          <span>{detail.broadcast}</span>
-                        </div>
-                      )}
+                      <BroadcastChips broadcasts={gameBroadcasts(game, detail)} compact />
                     </div>
                     {hasOdds && (
                       <div className="modal-odds-bar">
@@ -4123,12 +4306,7 @@ function GameDetailModal({ game, onClose }) {
                       <Icon name="mapPin" size={13} />
                       <span>{detail.venue}{detail.city ? ` · ${detail.city}` : ""}</span>
                     </div>
-                    {detail.broadcast && (
-                      <div className="modal-meta-row">
-                        <Icon name="tv" size={13} />
-                        <span>{detail.broadcast}</span>
-                      </div>
-                    )}
+                    <BroadcastChips broadcasts={gameBroadcasts(game, detail)} compact />
                   </div>
                 )}
                 {detail?.winProb && (
@@ -4347,13 +4525,39 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
   const [clientId, setClientId] = useState(settings.googleClientId || "");
   const [updateStatus, setUpdateStatus] = useState({ state: "idle", message: "", output: "" });
   const [displayStatus, setDisplayStatus] = useState({ state: "idle", message: "", output: "" });
+  const [startupStatus, setStartupStatus] = useState({ state: "idle", message: "Checking startup setting...", output: "", enabled: false, supported: true });
   const connected = !!settings.googleToken;
   const screenMode = settings.screenMode === SCREEN_SLEEP_MODE ? SCREEN_SLEEP_MODE : DEFAULT_SCREEN_MODE;
+  const headlineCycling = settings.headlineCycling !== false;
 
   useEffect(() => {
     function onKey(e) { if (e.key === "Escape") onClose(); }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getLocalService("/startup").then((payload) => {
+      if (cancelled) return;
+      setStartupStatus({
+        state: payload.enabled ? "success" : "idle",
+        message: payload.message || "Startup setting loaded.",
+        output: payload.path || "",
+        enabled: !!payload.enabled,
+        supported: payload.supported !== false,
+      });
+    }).catch((error) => {
+      if (cancelled) return;
+      setStartupStatus({
+        state: "warning",
+        message: "Startup control is available when Nash Track is running from main.py on the Pi.",
+        output: String(error.message || error),
+        enabled: false,
+        supported: false,
+      });
+    });
+    return () => { cancelled = true; };
   }, []);
 
   function handleBackdrop(e) { if (e.target === e.currentTarget) onClose(); }
@@ -4407,6 +4611,36 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
         output: String(error.message || error),
       });
     }
+  }
+
+  async function handleStartup(enabled) {
+    setStartupStatus((prev) => ({
+      ...prev,
+      state: "running",
+      message: enabled ? "Enabling launch at startup..." : "Disabling launch at startup...",
+      output: "",
+    }));
+    try {
+      const payload = await postDisplayService("/startup", { enabled });
+      setStartupStatus({
+        state: payload.enabled ? "success" : "idle",
+        message: payload.message || (enabled ? "Launch at startup enabled." : "Launch at startup disabled."),
+        output: payload.path || "",
+        enabled: !!payload.enabled,
+        supported: payload.supported !== false,
+      });
+    } catch (error) {
+      setStartupStatus((prev) => ({
+        ...prev,
+        state: "warning",
+        message: "Startup setting could not be changed from this device.",
+        output: String(error.message || error),
+      }));
+    }
+  }
+
+  function handleHeadlineCycling(enabled) {
+    onSave({ ...settings, headlineCycling: enabled });
   }
 
   return (
@@ -4504,6 +4738,42 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
           )}
         </div>
 
+        <p className="settings-section-label">Pi Startup</p>
+
+        <div className="settings-service-card">
+          <div className="settings-service-header">
+            <span className="settings-service-icon settings-service-icon-box">BOOT</span>
+            <div className="settings-service-info">
+              <strong>Launch at startup</strong>
+              <span className={startupStatus.enabled ? "connected-text" : "muted-text"}>
+                {startupStatus.enabled ? "Enabled" : startupStatus.supported === false ? "Pi only" : "Disabled"}
+              </span>
+            </div>
+            <div className="settings-mode-toggle" role="group" aria-label="Launch at startup">
+              <button
+                className={`settings-mode-btn ${startupStatus.enabled ? "active" : ""}`}
+                disabled={startupStatus.state === "running" || startupStatus.supported === false}
+                onClick={() => handleStartup(true)}
+              >
+                On
+              </button>
+              <button
+                className={`settings-mode-btn ${!startupStatus.enabled ? "active" : ""}`}
+                disabled={startupStatus.state === "running" || startupStatus.supported === false}
+                onClick={() => handleStartup(false)}
+              >
+                Off
+              </button>
+            </div>
+          </div>
+          {startupStatus.message && (
+            <div className={`settings-update-status ${startupStatus.state}`}>
+              <strong>{startupStatus.message}</strong>
+              {startupStatus.output && <pre>{startupStatus.output}</pre>}
+            </div>
+          )}
+        </div>
+
         <p className="settings-section-label">Display</p>
 
         <div className="settings-service-card">
@@ -4541,6 +4811,34 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
               {displayStatus.output && <pre>{displayStatus.output}</pre>}
             </div>
           )}
+        </div>
+
+        <p className="settings-section-label">Dashboard</p>
+
+        <div className="settings-service-card">
+          <div className="settings-service-header">
+            <span className="settings-service-icon settings-service-icon-box">NEWS</span>
+            <div className="settings-service-info">
+              <strong>Headline cycling</strong>
+              <span className={headlineCycling ? "connected-text" : "muted-text"}>
+                {headlineCycling ? "Cycles every 8 seconds" : "Pinned to first headline"}
+              </span>
+            </div>
+            <div className="settings-mode-toggle" role="group" aria-label="Headline cycling">
+              <button
+                className={`settings-mode-btn ${headlineCycling ? "active" : ""}`}
+                onClick={() => handleHeadlineCycling(true)}
+              >
+                On
+              </button>
+              <button
+                className={`settings-mode-btn ${!headlineCycling ? "active" : ""}`}
+                onClick={() => handleHeadlineCycling(false)}
+              >
+                Off
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="modal-actions" style={{ marginTop: 16 }}>
@@ -4587,20 +4885,19 @@ function Sidebar({ lastUpdated, nextRefresh, onOpenSettings, activeView, onNavig
       </nav>
       <div className="nav-divider" />
       <nav className="nav-stack utility">
-        {utilityNav.map(({ label, meta, icon }) => (
-          <button
-            className="nav-item"
-            key={label}
-            onClick={
-              label === "Settings" ? onOpenSettings :
-              label === "Calendar" || label === "Favorites" ? () => onNavigate("dashboard") :
-              undefined
-            }
-          >
-            <Icon name={icon} size={21} />
-            <span className="nav-copy"><strong>{label}</strong><small>{meta}</small></span>
-          </button>
-        ))}
+        {utilityNav.map(({ label, meta, icon }) => {
+          const view = label.toLowerCase();
+          return (
+            <button
+              className={`nav-item ${activeView === view ? "active" : ""}`}
+              key={label}
+              onClick={label === "Settings" ? onOpenSettings : () => onNavigate(view)}
+            >
+              <Icon name={icon} size={21} />
+              <span className="nav-copy"><strong>{label}</strong><small>{meta}</small></span>
+            </button>
+          );
+        })}
       </nav>
       <div className="sync-status">
         <span className="status-dot" />
@@ -4841,7 +5138,264 @@ const ESPN_FEEDS = [
   { sport: "soccer",     league: "eng.1", leagueShort: "EPL", tone: "blue"   },
 ];
 
-function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh }) {
+function HeadlinesRail({ articles, cycling = true }) {
+  const [index, setIndex] = useState(0);
+  const items = articles || [];
+  const active = items[index % Math.max(items.length, 1)];
+
+  useEffect(() => {
+    setIndex(0);
+  }, [items.map((article) => article.id || article.headline || article.title).join("|")]);
+
+  useEffect(() => {
+    if (!cycling || items.length <= 1) return undefined;
+    const timer = setInterval(() => setIndex((value) => (value + 1) % items.length), 8000);
+    return () => clearInterval(timer);
+  }, [cycling, items.length]);
+
+  return (
+    <section className="panel side-card headlines-rail">
+      <div className="side-title">
+        <h2>Headlines</h2>
+        <span>{items.length ? `${(index % items.length) + 1}/${items.length}` : "Standby"}</span>
+      </div>
+      {!active ? (
+        <p className="gcal-empty">No headlines returned yet</p>
+      ) : (
+        <button
+          className="headline-rail-card"
+          onClick={() => active.links?.web?.href && window.open(active.links.web.href, "_blank")}
+          disabled={!active.links?.web?.href}
+        >
+          <div
+            className="headline-rail-thumb"
+            style={active.images?.[0]?.url ? { backgroundImage: `url(${active.images[0].url})` } : {}}
+          />
+          <strong>{active.headline || active.title}</strong>
+          <span>
+            {active.categories?.[0]?.description || active.type || "Sports"}
+            {active.published
+              ? ` - ${new Date(active.published).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+              : ""}
+          </span>
+        </button>
+      )}
+    </section>
+  );
+}
+
+async function fetchAllSportsEvents() {
+  const year = new Date().getFullYear();
+  const [espnResults, f1Sessions] = await Promise.all([
+    Promise.all(ESPN_FEEDS.map(({ sport, league, leagueShort, tone }) =>
+      fetchScoreboard(sport, league).then((evts) =>
+        evts.map((event) => parseESPNEvent(event, leagueShort, tone, sport, league))
+      )
+    )),
+    fetchF1(year),
+  ]);
+  return [...espnResults.flat(), ...f1Sessions];
+}
+
+function eventsToUpcomingPanel(events, count = 4) {
+  return events
+    .filter((game) => !game.isLive && game.state !== "post")
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(0, count)
+    .map((game) => ({
+      name: game.leagueShort === "F1"
+        ? `${game.meetingName} - ${game.home}`
+        : `${game.away} vs ${game.home}`,
+      meta: `${game.leagueShort} - ${formatGameTime(game.date)}`,
+      count: formatCountdown(game.date),
+      awayLogo: game.awayLogo,
+    }));
+}
+
+function FavoritesView({ onUpdated, onNextRefresh }) {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const tags = new Set(favorites.map((team) => team.tag));
+
+  useEffect(() => {
+    let cancelled = false;
+    let timerId;
+    async function load() {
+      const all = await fetchAllSportsEvents();
+      if (cancelled) return;
+      setEvents(all.filter((game) => tags.has(game.away) || tags.has(game.home)));
+      setLoading(false);
+      const now = new Date();
+      onUpdated?.(now);
+      onNextRefresh?.(new Date(Date.now() + 5 * 60_000));
+      timerId = setTimeout(load, 5 * 60_000);
+    }
+    load();
+    return () => { cancelled = true; clearTimeout(timerId); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <main className="utility-view favorites-view">
+      <section className="panel utility-hero">
+        <div>
+          <span>Favorites</span>
+          <h2>Saved Teams</h2>
+        </div>
+        <strong>{favorites.length}</strong>
+      </section>
+      <section className="panel favorite-team-grid">
+        {favorites.map(({ name, meta, tag, logo }) => (
+          <article className="favorite-team-card" key={name}>
+            <TeamMark label={tag} logo={logo} tone={meta === "NFL" ? "green" : meta === "NBA" ? "orange" : meta === "F1 team" ? "red" : "blue"} />
+            <div className="row-copy"><strong>{name}</strong><span>{meta}</span></div>
+            <Icon name="star" size={15} filled />
+          </article>
+        ))}
+      </section>
+      <section className="panel favorite-games-panel">
+        <div className="section-title"><div><h2>Favorite Games</h2></div></div>
+        {loading ? (
+          <div className="loading-pulse" style={{ height: 70 }} />
+        ) : events.length ? (
+          <div className="event-list">
+            {events.slice(0, 5).map((game) => (
+              <div className="event-row" key={game.id}>
+                <div className="event-logos">
+                  <TeamMark label={game.away} logo={game.awayLogo} tone={game.tone} size="sm" />
+                </div>
+                <div className="row-copy">
+                  <strong>{gameDisplayName(game)}</strong>
+                  <span>{game.isLive ? game.status : formatGameTime(game.date)}</span>
+                </div>
+                <b>{game.isLive ? "LIVE" : game.state === "post" ? "FT" : formatCountdown(game.date)}</b>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="gcal-empty">No favorite-team games in the current feeds.</p>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function CalendarView({ googleEvents, googleConnected, onUpdated, onNextRefresh }) {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timerId;
+    async function load() {
+      const all = await fetchAllSportsEvents();
+      if (cancelled) return;
+      setEvents(all);
+      setLoading(false);
+      const now = new Date();
+      onUpdated?.(now);
+      onNextRefresh?.(new Date(Date.now() + 5 * 60_000));
+      timerId = setTimeout(load, 5 * 60_000);
+    }
+    load();
+    return () => { cancelled = true; clearTimeout(timerId); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <main className="utility-view calendar-view">
+      <CalendarPanel googleEvents={googleEvents} connected={googleConnected} sportsGames={events} />
+      <UpcomingPanel events={eventsToUpcomingPanel(events, 6)} />
+      {loading && <section className="panel"><div className="loading-pulse" style={{ height: 44 }} /></section>}
+    </main>
+  );
+}
+
+const SPORT_COMMAND_CONFIG = {
+  basketball: { sport: "basketball", league: "nba", leagueShort: "NBA", tone: "orange", title: "NBA Courtside" },
+  soccer: { sport: "soccer", league: "eng.1", leagueShort: "EPL", tone: "blue", title: "EPL Matchday" },
+};
+
+function SportCommandView({ config, onUpdated, onNextRefresh }) {
+  const [games, setGames] = useState([]);
+  const [news, setNews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("soon");
+  const [selectedGame, setSelectedGame] = useState(null);
+  const firstLoadRef = useRef(true);
+  const soonCountRef = useRef(0);
+  const loadRef = useRef(null);
+
+  loadRef.current = async function loadSportView() {
+    const [scoreboard, headlines] = await Promise.all([
+      fetchScoreboard(config.sport, config.league),
+      fetchNews(config.sport, config.league),
+    ]);
+    const normalized = scoreboard.map((event) =>
+      parseESPNEvent(event, config.leagueShort, config.tone, config.sport, config.league)
+    );
+    const live = normalized.filter((game) => game.isLive);
+    const soon = normalized.filter((game) => !game.isLive && game.state !== "post");
+    soonCountRef.current = soon.filter((game) => new Date(game.date).getTime() - Date.now() < 30 * 60_000).length;
+    setGames(normalized);
+    setNews(headlines);
+    setLoading(false);
+    setSelectedGame((prev) => prev ? (normalized.find((game) => game.id === prev.id) || prev) : prev);
+    if (firstLoadRef.current) {
+      firstLoadRef.current = false;
+      if (live.length) setActiveTab("live");
+      else if (soon.length) setActiveTab("soon");
+      else setActiveTab("recent");
+    }
+    const now = new Date();
+    const refreshMs = live.length ? 30_000 : soonCountRef.current ? 60_000 : 5 * 60_000;
+    onUpdated?.(now);
+    onNextRefresh?.(new Date(Date.now() + refreshMs));
+    return refreshMs;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    let timerId;
+    async function run() {
+      const refreshMs = await loadRef.current();
+      if (!cancelled) timerId = setTimeout(run, refreshMs);
+    }
+    run().catch(() => {
+      setLoading(false);
+      timerId = setTimeout(run, 5 * 60_000);
+    });
+    return () => { cancelled = true; clearTimeout(timerId); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const liveGames = games.filter((game) => game.isLive);
+  const recentGames = games.filter((game) => game.state === "post");
+  const upcomingGames = games.filter((game) => !game.isLive && game.state !== "post");
+
+  return (
+    <>
+      {selectedGame && (
+        <ModalErrorBoundary onClose={() => setSelectedGame(null)}>
+          <GameCenterModal game={selectedGame} onClose={() => setSelectedGame(null)} />
+        </ModalErrorBoundary>
+      )}
+      <main className="sport-command-view">
+        <LiveScoreTicker games={games} title={`${config.leagueShort} Live`} onSelectGame={setSelectedGame} />
+        <GamesSection
+          liveGames={liveGames}
+          recentGames={recentGames}
+          upcomingGames={upcomingGames}
+          loading={loading}
+          onSelectGame={setSelectedGame}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          lastUpdated={new Date()}
+        />
+        <HeadlinesRail articles={news} />
+      </main>
+    </>
+  );
+}
+
+function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh, settings }) {
   const [liveGames,     setLiveGames]     = useState([]);
   const [recentGames,   setRecentGames]   = useState([]);
   const [upcomingGames, setUpcomingGames] = useState([]);
@@ -4858,19 +5412,10 @@ function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh }) 
   const soonCountRef = useRef(0);
 
   doLoadRef.current = async function load() {
-    const year = new Date().getFullYear();
-    const [espnResults, newsArticles, f1Sessions] = await Promise.all([
-      Promise.all(ESPN_FEEDS.map(({ sport, league, leagueShort, tone }) =>
-        fetchScoreboard(sport, league).then((evts) =>
-          evts.map((e) => parseESPNEvent(e, leagueShort, tone, sport, league))
-        )
-      )),
+    const [allEvents, newsArticles] = await Promise.all([
+      fetchAllSportsEvents(),
       fetchNews("basketball", "nba"),
-      fetchF1(year),
     ]);
-
-    const espn = espnResults.flat();
-    const allEvents = [...espn, ...f1Sessions];
 
     const live   = allEvents.filter((g) => g.isLive);
     const recent = allEvents.filter((g) => g.state === "post");
@@ -4946,6 +5491,11 @@ function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh }) 
       )}
       <main className="dashboard">
         <div className="primary-column">
+          <LiveScoreTicker
+            games={[...liveGames, ...upcomingGames, ...recentGames]}
+            title="All Sports Live"
+            onSelectGame={setSelectedGame}
+          />
           <GamesSection
             liveGames={liveGames}
             recentGames={recentGames}
@@ -4956,16 +5506,15 @@ function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh }) 
             setActiveTab={setActiveTab}
             lastUpdated={lastUpdated}
           />
-          <Headlines articles={headlines} />
-        </div>
-
-        <aside className="right-column">
           <CalendarPanel
             googleEvents={googleEvents}
             connected={googleConnected}
             sportsGames={[...liveGames, ...upcomingGames, ...recentGames]}
           />
-          <FavoritesPanel />
+        </div>
+
+        <aside className="right-column">
+          <HeadlinesRail articles={headlines} cycling={settings?.headlineCycling !== false} />
           <UpcomingPanel events={upcomingPanel} />
         </aside>
       </main>
@@ -5093,12 +5642,26 @@ function App() {
           </F1ErrorBoundary>
         ) : activeView === "football" ? (
           <NFLCommandView onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} />
+        ) : activeView === "basketball" ? (
+          <SportCommandView config={SPORT_COMMAND_CONFIG.basketball} onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} />
+        ) : activeView === "soccer" ? (
+          <SportCommandView config={SPORT_COMMAND_CONFIG.soccer} onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} />
+        ) : activeView === "favorites" ? (
+          <FavoritesView onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} />
+        ) : activeView === "calendar" ? (
+          <CalendarView
+            googleEvents={calEvents}
+            googleConnected={!!googleToken}
+            onUpdated={setLastUpdated}
+            onNextRefresh={setNextRefresh}
+          />
         ) : (
           <Dashboard
             onUpdated={setLastUpdated}
             onNextRefresh={setNextRefresh}
             googleEvents={calEvents}
             googleConnected={!!googleToken}
+            settings={settings}
           />
         )}
         <footer className="footer-bar">

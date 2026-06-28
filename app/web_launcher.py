@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import json
 import shutil
+import stat
 import subprocess
 import threading
 import time
@@ -31,6 +32,7 @@ DISPLAY_STATE_FILE = Path(
 )
 DISPLAY_MODES = {"alwaysOn", "sleep3"}
 DISPLAY_POWER_STATES = {"on", "off"}
+AUTOSTART_FILE = Path.home() / ".config" / "autostart" / "nashtrack.desktop"
 _updater_server: ThreadingHTTPServer | None = None
 _updater_thread: threading.Thread | None = None
 
@@ -258,6 +260,67 @@ def _read_display_mode() -> str:
         return "alwaysOn"
 
 
+def _autostart_supported() -> bool:
+    return os.name != "nt"
+
+
+def _autostart_desktop_text() -> str:
+    return "\n".join(
+        [
+            "[Desktop Entry]",
+            "Type=Application",
+            "Name=NashTrack",
+            "Comment=Launch NashTrack sports dashboard",
+            f"Exec=python3 {ROOT_DIR / 'main.py'}",
+            f"Path={ROOT_DIR}",
+            "Terminal=false",
+            "StartupNotify=false",
+            "X-GNOME-Autostart-enabled=true",
+            "",
+        ]
+    )
+
+
+def _autostart_status() -> dict[str, object]:
+    if not _autostart_supported():
+        return {
+            "ok": True,
+            "supported": False,
+            "enabled": False,
+            "message": "Launch at startup is available on the Raspberry Pi desktop session.",
+        }
+
+    enabled = AUTOSTART_FILE.exists()
+    return {
+        "ok": True,
+        "supported": True,
+        "enabled": enabled,
+        "path": str(AUTOSTART_FILE),
+        "message": "NashTrack will launch at startup." if enabled else "NashTrack startup launch is off.",
+    }
+
+
+def _set_autostart(enabled: bool) -> dict[str, object]:
+    if not _autostart_supported():
+        return {
+            "ok": False,
+            "supported": False,
+            "message": "Launch at startup is only supported from the Raspberry Pi desktop session.",
+        }
+
+    try:
+        if enabled:
+            AUTOSTART_FILE.parent.mkdir(parents=True, exist_ok=True)
+            AUTOSTART_FILE.write_text(_autostart_desktop_text(), encoding="utf-8")
+            AUTOSTART_FILE.chmod(AUTOSTART_FILE.stat().st_mode | stat.S_IXUSR)
+        elif AUTOSTART_FILE.exists():
+            AUTOSTART_FILE.unlink()
+    except OSError as error:
+        return {"ok": False, "supported": True, "message": f"Startup setting failed: {error}"}
+
+    return _autostart_status()
+
+
 class _UpdaterHandler(BaseHTTPRequestHandler):
     server_version = "NashTrackUpdater/1.0"
 
@@ -297,6 +360,9 @@ class _UpdaterHandler(BaseHTTPRequestHandler):
         if route == "/display":
             self._send_json(200, {"ok": True, "mode": _read_display_mode()})
             return
+        if route == "/startup":
+            self._send_json(200, _autostart_status())
+            return
         self._send_json(404, {"ok": False, "message": "Unknown updater route."})
 
     def do_POST(self) -> None:
@@ -316,6 +382,12 @@ class _UpdaterHandler(BaseHTTPRequestHandler):
             if route == "/display/power":
                 payload = self._read_json_body()
                 result = _set_display_power(str(payload.get("state", "")))
+                self._send_json(200 if result.get("ok") else 501, result)
+                return
+
+            if route == "/startup":
+                payload = self._read_json_body()
+                result = _set_autostart(bool(payload.get("enabled")))
                 self._send_json(200 if result.get("ok") else 501, result)
                 return
 

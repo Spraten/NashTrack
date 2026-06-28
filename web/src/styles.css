@@ -315,7 +315,7 @@ button {
 }
 
 .right-column {
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto;
   align-content: start;
 }
 
@@ -390,6 +390,166 @@ h2 {
   display: grid;
   gap: 8px;
   grid-template-rows: 18px auto 16px 4px 30px;
+}
+
+.card-bottom-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.broadcast-chips {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.broadcast-chips.compact {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.broadcast-chip {
+  height: 18px;
+  max-width: 74px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border: 1px solid rgba(133, 160, 197, 0.2);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.broadcast-chip.espn,
+.broadcast-chip.abc {
+  color: #ff7878;
+  border-color: rgba(255, 120, 120, 0.28);
+}
+
+.broadcast-chip.prime,
+.broadcast-chip.peacock,
+.broadcast-chip.apple {
+  color: #9fc8ff;
+  border-color: rgba(88, 166, 255, 0.28);
+}
+
+.live-score-ticker {
+  min-height: 68px;
+  display: grid;
+  grid-template-rows: 18px minmax(0, 1fr) 18px;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.ticker-title,
+.ticker-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.ticker-title {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ticker-title h2 {
+  margin: 0;
+}
+
+.ticker-title span {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  font-weight: 800;
+}
+
+.ticker-main {
+  gap: 8px;
+}
+
+.ticker-badge {
+  height: 20px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: rgba(88, 217, 109, 0.14);
+  color: #9effad;
+  font-size: 9px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.ticker-badge.red-zone,
+.ticker-badge.close {
+  background: rgba(255, 51, 51, 0.18);
+  color: #ff9c9c;
+}
+
+.ticker-badge.soon {
+  background: rgba(255, 203, 107, 0.14);
+  color: #ffd166;
+}
+
+.ticker-copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 1px;
+}
+
+.ticker-copy strong,
+.ticker-copy span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticker-copy strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.ticker-copy span {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.ticker-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 900;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ticker-score i {
+  color: var(--muted);
+  font-style: normal;
+}
+
+.ticker-score .winning {
+  color: var(--green);
 }
 
 .live-card.orange {
@@ -631,6 +791,129 @@ h2 {
 .event-row span {
   color: var(--muted);
   font-size: var(--fs-meta);
+}
+
+.headlines-rail {
+  min-height: 138px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+}
+
+.headline-rail-card {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 58px auto auto;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.headline-rail-card:disabled {
+  cursor: default;
+}
+
+.headline-rail-thumb {
+  border-radius: 7px;
+  background: #1b2f48;
+  background-position: center;
+  background-size: cover;
+}
+
+.headline-rail-card strong,
+.headline-rail-card span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.headline-rail-card strong {
+  color: var(--text);
+  display: -webkit-box;
+  font-size: 12px;
+  line-height: 1.25;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.headline-rail-card span {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+}
+
+.utility-view,
+.sport-command-view {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.utility-view {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.sport-command-view {
+  grid-template-rows: 68px minmax(0, 1fr) 138px;
+}
+
+.utility-hero {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.utility-hero span {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.utility-hero h2 {
+  margin: 2px 0 0;
+  font-size: 24px;
+}
+
+.utility-hero > strong {
+  color: var(--orange);
+  font-size: 30px;
+}
+
+.favorite-team-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.favorite-team-card {
+  min-width: 0;
+  height: 74px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(12, 24, 38, 0.8);
+}
+
+.favorite-team-card svg {
+  color: var(--orange);
+}
+
+.favorite-games-panel {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .side-card {
@@ -1022,7 +1305,7 @@ h2 {
   }
 
   .right-column {
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .panel {
@@ -1126,6 +1409,60 @@ h2 {
     height: 3px;
   }
 
+  .card-bottom-row {
+    gap: 4px;
+  }
+
+  .broadcast-chips {
+    gap: 3px;
+  }
+
+  .broadcast-chip {
+    height: 14px;
+    max-width: 52px;
+    padding: 0 4px;
+    border-radius: 4px;
+    font-size: 7px;
+  }
+
+  .live-score-ticker {
+    min-height: 44px;
+    grid-template-rows: 11px 18px 12px;
+    gap: 2px;
+    padding: 5px;
+    border-radius: 7px;
+  }
+
+  .ticker-title h2 {
+    font-size: 9px;
+  }
+
+  .ticker-title span,
+  .ticker-copy span {
+    font-size: 7px;
+  }
+
+  .ticker-main {
+    gap: 5px;
+  }
+
+  .ticker-badge {
+    height: 16px;
+    min-width: 36px;
+    padding: 0 4px;
+    border-radius: 4px;
+    font-size: 7px;
+  }
+
+  .ticker-copy strong {
+    font-size: 10px;
+  }
+
+  .ticker-score {
+    gap: 3px;
+    font-size: 13px;
+  }
+
 
   .soon-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1180,6 +1517,74 @@ h2 {
   .favorite-row span,
   .event-row span {
     font-size: 9px;
+  }
+
+  .headlines-rail {
+    min-height: 82px;
+    gap: 4px;
+  }
+
+  .headline-rail-card {
+    grid-template-rows: 31px auto auto;
+    gap: 3px;
+  }
+
+  .headline-rail-thumb {
+    border-radius: 5px;
+  }
+
+  .headline-rail-card strong {
+    font-size: 9px;
+    line-height: 1.1;
+  }
+
+  .headline-rail-card span {
+    font-size: 8px;
+  }
+
+  .utility-view,
+  .sport-command-view {
+    gap: 5px;
+  }
+
+  .sport-command-view {
+    grid-template-rows: 44px minmax(0, 1fr) 82px;
+  }
+
+  .utility-hero {
+    min-height: 42px;
+    padding: 6px;
+    border-radius: 7px;
+  }
+
+  .utility-hero span {
+    font-size: 8px;
+  }
+
+  .utility-hero h2 {
+    font-size: 16px;
+  }
+
+  .utility-hero > strong {
+    font-size: 21px;
+  }
+
+  .favorite-team-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .favorite-team-card {
+    height: 48px;
+    grid-template-columns: 26px minmax(0, 1fr) 12px;
+    gap: 5px;
+    padding: 5px;
+    border-radius: 7px;
+  }
+
+  .favorite-team-card .team-mark {
+    width: 24px;
+    height: 24px;
   }
 
   .side-card {
@@ -3354,7 +3759,7 @@ h2 {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 112px 132px minmax(0, 1fr);
+  grid-template-rows: 112px 68px 132px minmax(0, 1fr);
   gap: 8px;
   overflow: hidden;
 }
@@ -3522,7 +3927,7 @@ h2 {
   min-width: 0;
   height: 100%;
   display: grid;
-  grid-template-rows: 18px minmax(0, 1fr) 20px;
+  grid-template-rows: 18px minmax(0, 1fr) 17px 18px;
   gap: 4px;
   padding: 7px;
   border: 1px solid var(--line);
@@ -4077,7 +4482,7 @@ h2 {
 
 @media (max-width: 900px) and (max-height: 540px) {
   .nfl-view {
-    grid-template-rows: 82px 102px minmax(0, 1fr);
+    grid-template-rows: 74px 44px 86px minmax(0, 1fr);
     gap: 5px;
   }
 
@@ -4139,7 +4544,7 @@ h2 {
   }
 
   .nfl-game-card {
-    grid-template-rows: 15px minmax(0, 1fr) 16px;
+    grid-template-rows: 14px minmax(0, 1fr) 13px 14px;
     gap: 2px;
     padding: 5px;
     border-radius: 6px;
