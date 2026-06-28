@@ -2142,6 +2142,7 @@ h2 {
 }
 
 .gc-situation-card {
+  display: grid;
   gap: 3px;
 }
 
