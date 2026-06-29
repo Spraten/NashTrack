@@ -119,21 +119,21 @@ Third pass added: redesigned full-game popup as a compact Game Center with match
 
 ### P1 - First Run And Personalization
 
-- [ ] Build a first-run setup wizard:
+- [x] Build a first-run setup wizard:
   - Screen setup: 800x480 profile, fullscreen, brightness, sleep mode, and touch calibration notes.
   - Favorite setup: sports, leagues, teams, F1 drivers, and F1 constructors.
   - Services: Google Calendar, weather location, launch at startup, and auto-update preference.
   - Demo/live choice so the app looks useful even when no games are live.
-- [ ] Replace hardcoded starter favorites with user-managed favorites.
-- [ ] Add favorite team picker and favorite sport/league picker.
-- [ ] Add "pin this team" actions from game modals and team views.
-- [ ] Add "hide this league" controls for dashboard filtering.
-- [ ] Use favorite priority sorting across dashboard games, alerts, injuries, news, and upcoming events.
-- [ ] Add team-specific headline filtering for Favorites, Football, Basketball, and Soccer.
+- [x] Replace hardcoded starter favorites with user-managed favorites.
+- [x] Add favorite team picker and favorite sport/league picker.
+- [x] Add "pin this team" actions from game modals and team views.
+- [x] Add "hide this league" controls for dashboard filtering.
+- [x] Use favorite priority sorting across dashboard games, alerts, injuries, news, and upcoming events.
+- [x] Add team-specific headline filtering for Favorites, Football, Basketball, and Soccer.
 
 ### P1 - Appliance Dashboard UX
 
-- [ ] Add dashboard density modes:
+- [x] Add dashboard density modes:
   - Command Mode: current dense command-center layout.
   - Glance Mode: oversized live score, next event, and favorite-team state.
   - Nightstand Mode: clock, weather, next game, dim visuals, and reduced motion.
@@ -141,12 +141,12 @@ Third pass added: redesigned full-game popup as a compact Game Center with match
   - Now: live games, urgent alerts, and live or near-start F1 sessions.
   - Next: games and sessions starting soon.
   - Later: calendar, upcoming slate, and planning context.
-- [ ] Expand the RedZone-style alert rail globally for close games, favorite teams live, finals, F1 session starts, upset watch, red-zone trips, and turnovers.
-- [ ] Add a one-tap Home/Back zone so touchscreen users never feel stuck inside nested views.
+- [x] Expand the RedZone-style alert rail globally for close games, favorite teams live, finals, F1 session starts, upset watch, red-zone trips, and turnovers.
+- [x] Add a one-tap Home/Back zone so touchscreen users never feel stuck inside nested views.
 - [ ] Add swipe hints that appear only the first few times, then stay out of the way.
-- [ ] Tighten accessibility: `aria-current` for active navigation, better labels for icon-heavy controls, and visible keyboard focus states.
+- [x] Tighten accessibility: `aria-current` for active navigation, better labels for icon-heavy controls, and visible keyboard focus states.
 - [ ] Improve empty states with useful next-best context, such as "No NFL games today. Next Cowboys game: Sunday 4:25 PM."
-- [ ] Add demo/mock data mode for off-season testing and development.
+- [x] Add demo/mock data mode for off-season testing and development.
 
 ### P1 - Pi Health And Maintenance
 

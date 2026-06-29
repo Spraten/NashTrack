@@ -96,13 +96,55 @@ const SLEEP_CONTROL_TAP_WINDOW_MS = 1400;
 const AUTO_UPDATE_CHECK_INTERVAL_MS = 5 * 60_000;
 const AUTO_UPDATE_RELOAD_DELAY_MS = 3500;
 const UPDATE_SKIP_KEY = "nash-update-skipped-revision";
+const DEFAULT_NASH_SETTINGS = {
+  screenMode: DEFAULT_SCREEN_MODE,
+  headlineCycling: true,
+  autoUpdates: false,
+  onboardingComplete: false,
+  dashboardDensity: "command",
+  demoMode: false,
+  favoriteTags: ["FER", "LAL", "MU", "DAL"],
+  favoriteOverrides: {},
+  preferredLeagues: ["NFL", "NBA", "EPL", "F1"],
+  hiddenLeagues: [],
+  swipeHintsSeen: false,
+};
+
+function normalizeNashSettings(settings = {}) {
+  const favoriteTags = Array.isArray(settings.favoriteTags)
+    ? settings.favoriteTags.filter(Boolean)
+    : DEFAULT_NASH_SETTINGS.favoriteTags;
+  const preferredLeagues = Array.isArray(settings.preferredLeagues)
+    ? settings.preferredLeagues.filter(Boolean)
+    : DEFAULT_NASH_SETTINGS.preferredLeagues;
+  const hiddenLeagues = Array.isArray(settings.hiddenLeagues)
+    ? settings.hiddenLeagues.filter(Boolean)
+    : DEFAULT_NASH_SETTINGS.hiddenLeagues;
+  const dashboardDensity = ["command", "glance", "nightstand"].includes(settings.dashboardDensity)
+    ? settings.dashboardDensity
+    : DEFAULT_NASH_SETTINGS.dashboardDensity;
+
+  return {
+    ...DEFAULT_NASH_SETTINGS,
+    ...settings,
+    favoriteTags,
+    favoriteOverrides: settings.favoriteOverrides && typeof settings.favoriteOverrides === "object" ? settings.favoriteOverrides : {},
+    preferredLeagues,
+    hiddenLeagues,
+    dashboardDensity,
+    demoMode: settings.demoMode === true,
+    headlineCycling: settings.headlineCycling !== false,
+    autoUpdates: settings.autoUpdates === true,
+    onboardingComplete: settings.onboardingComplete === true,
+  };
+}
 
 function loadNashSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(NASH_SETTINGS_KEY) || "{}");
-    return { screenMode: DEFAULT_SCREEN_MODE, headlineCycling: true, autoUpdates: false, ...saved };
+    return normalizeNashSettings(saved);
   } catch {
-    return { screenMode: DEFAULT_SCREEN_MODE, headlineCycling: true, autoUpdates: false };
+    return normalizeNashSettings();
   }
 }
 
@@ -850,6 +892,17 @@ async function fetchNFLInjuries() {
   } catch { return []; }
 }
 
+function sortNFLInjuries(rows, settings) {
+  const favoriteTags = nflFavoriteTags(settings);
+  return [...(rows || [])].sort((a, b) => {
+    const favoriteDelta = Number(favoriteTags.has(b.team)) - Number(favoriteTags.has(a.team));
+    if (favoriteDelta) return favoriteDelta;
+    const severityDelta = nflInjurySeverity(a) - nflInjurySeverity(b);
+    if (severityDelta) return severityDelta;
+    return new Date(b.date || 0) - new Date(a.date || 0);
+  });
+}
+
 function normalizeNFLTeamStats(data) {
   const categories = data?.results?.stats?.categories || [];
   const byCategory = Object.fromEntries(categories.map((category) => [
@@ -1149,12 +1202,247 @@ function espnGameUrl(game) {
   if (game.sport === "soccer") return `${base}/${game.sport}/${game.league}/match/_/gameId/${game.id}`;
   return `${base}/${game.sport}/${game.league}/game/_/gameId/${game.id}`;
 }
-const favorites = [
+const DEFAULT_FAVORITES = [
   { name: "Ferrari", meta: "F1 team", tag: "FER", logo: "https://a.espncdn.com/i/teamlogos/f1/500/ferrari.png" },
   { name: "LA Lakers", meta: "NBA", tag: "LAL", logo: "https://a.espncdn.com/i/teamlogos/nba/500/lal.png" },
   { name: "Man United", meta: "Soccer", tag: "MU", logo: "https://a.espncdn.com/i/teamlogos/soccer/500/360.png" },
   { name: "Dallas Cowboys", meta: "NFL", tag: "DAL", logo: "https://a.espncdn.com/i/teamlogos/nfl/500/dal.png" },
 ];
+
+const FAVORITE_OPTIONS = [
+  ...DEFAULT_FAVORITES,
+  { name: "Kansas City Chiefs", meta: "NFL", tag: "KC", logo: "https://a.espncdn.com/i/teamlogos/nfl/500/kc.png" },
+  { name: "Philadelphia Eagles", meta: "NFL", tag: "PHI", logo: "https://a.espncdn.com/i/teamlogos/nfl/500/phi.png" },
+  { name: "San Francisco 49ers", meta: "NFL", tag: "SF", logo: "https://a.espncdn.com/i/teamlogos/nfl/500/sf.png" },
+  { name: "Boston Celtics", meta: "NBA", tag: "BOS", logo: "https://a.espncdn.com/i/teamlogos/nba/500/bos.png" },
+  { name: "Golden State Warriors", meta: "NBA", tag: "GS", logo: "https://a.espncdn.com/i/teamlogos/nba/500/gs.png" },
+  { name: "New York Knicks", meta: "NBA", tag: "NY", logo: "https://a.espncdn.com/i/teamlogos/nba/500/ny.png" },
+  { name: "Arsenal", meta: "Soccer", tag: "ARS", logo: "https://a.espncdn.com/i/teamlogos/soccer/500/359.png" },
+  { name: "Liverpool", meta: "Soccer", tag: "LIV", logo: "https://a.espncdn.com/i/teamlogos/soccer/500/364.png" },
+  { name: "Red Bull Racing", meta: "F1 team", tag: "RBR", logo: "https://a.espncdn.com/i/teamlogos/f1/500/red-bull.png" },
+  { name: "McLaren", meta: "F1 team", tag: "MCL", logo: "https://a.espncdn.com/i/teamlogos/f1/500/mclaren.png" },
+  { name: "Mercedes", meta: "F1 team", tag: "MER", logo: "https://a.espncdn.com/i/teamlogos/f1/500/mercedes.png" },
+  { name: "Max Verstappen", meta: "F1 driver", tag: "VER", logo: "" },
+  { name: "Lewis Hamilton", meta: "F1 driver", tag: "HAM", logo: "" },
+  { name: "Lando Norris", meta: "F1 driver", tag: "NOR", logo: "" },
+  { name: "Charles Leclerc", meta: "F1 driver", tag: "LEC", logo: "" },
+];
+
+const LEAGUE_OPTIONS = [
+  { key: "NFL", label: "NFL", meta: "Football" },
+  { key: "NBA", label: "NBA", meta: "Basketball" },
+  { key: "EPL", label: "EPL", meta: "Soccer" },
+  { key: "F1", label: "F1", meta: "Formula 1" },
+];
+
+const DASHBOARD_DENSITIES = [
+  { key: "command", label: "Command", meta: "Dense" },
+  { key: "glance", label: "Glance", meta: "Large" },
+  { key: "nightstand", label: "Night", meta: "Dim" },
+];
+
+function getFavoriteTags(settings) {
+  return new Set(normalizeNashSettings(settings).favoriteTags);
+}
+
+function getFavoriteItems(settings) {
+  const normalized = normalizeNashSettings(settings);
+  const optionMap = new Map(FAVORITE_OPTIONS.map((item) => [item.tag, item]));
+  return normalized.favoriteTags.map((tag) => (
+    optionMap.get(tag) ||
+    normalized.favoriteOverrides?.[tag] ||
+    { name: tag, meta: "Team", tag, logo: "" }
+  ));
+}
+
+function isFavoriteGame(game, settings) {
+  const tags = getFavoriteTags(settings);
+  return tags.has(game?.away) || tags.has(game?.home);
+}
+
+function leagueVisible(game, settings) {
+  const normalized = normalizeNashSettings(settings);
+  const league = game?.leagueShort;
+  if (!league) return true;
+  if (normalized.hiddenLeagues.includes(league)) return false;
+  return normalized.preferredLeagues.length === 0 || normalized.preferredLeagues.includes(league);
+}
+
+function prioritySortGames(games, settings) {
+  return [...games].sort((a, b) => {
+    const favDelta = Number(isFavoriteGame(b, settings)) - Number(isFavoriteGame(a, settings));
+    if (favDelta) return favDelta;
+    const liveDelta = Number(b.isLive) - Number(a.isLive);
+    if (liveDelta) return liveDelta;
+    return new Date(a.date || 0) - new Date(b.date || 0);
+  });
+}
+
+function favoriteHeadlineFilter(articles, settings) {
+  const favorites = getFavoriteItems(settings);
+  const terms = favorites.flatMap((item) => [item.name, item.tag]).filter(Boolean).map((term) => term.toLowerCase());
+  if (!terms.length) return articles;
+  const matches = articles.filter((article) => {
+    const text = [
+      article.headline,
+      article.title,
+      article.description,
+      article.categories?.[0]?.description,
+    ].filter(Boolean).join(" ").toLowerCase();
+    return terms.some((term) => text.includes(term));
+  });
+  return matches.length ? matches : articles;
+}
+
+function favoriteFromGame(game, side = "home") {
+  const tag = side === "away" ? game?.away : game?.home;
+  if (!tag) return null;
+  return {
+    name: side === "away" ? (game.awayFull || game.away) : (game.homeFull || game.home),
+    meta: game.leagueShort || "Team",
+    tag,
+    logo: side === "away" ? game.awayLogo : game.homeLogo,
+  };
+}
+
+function favoriteTone(meta) {
+  if (meta === "NFL") return "green";
+  if (meta === "NBA") return "orange";
+  if (meta === "F1 team" || meta === "F1 driver") return "red";
+  return "blue";
+}
+
+function demoDate(minutesFromNow) {
+  return new Date(Date.now() + minutesFromNow * 60_000).toISOString();
+}
+
+function demoDashboardEvents() {
+  const now = Date.now();
+  const liveStarted = new Date(now - 28 * 60_000).toISOString();
+  return [
+    {
+      id: "demo-nfl-dal-phi",
+      leagueShort: "NFL",
+      tone: "green",
+      sport: "football",
+      league: "nfl",
+      away: "DAL",
+      home: "PHI",
+      awayFull: "Dallas Cowboys",
+      homeFull: "Philadelphia Eagles",
+      awayLogo: "https://a.espncdn.com/i/teamlogos/nfl/500/dal.png",
+      homeLogo: "https://a.espncdn.com/i/teamlogos/nfl/500/phi.png",
+      awayRecord: "10-4",
+      homeRecord: "11-3",
+      awayScore: "24",
+      homeScore: "27",
+      awayWinning: false,
+      homeWinning: true,
+      status: "Q4 2:14",
+      broadcasts: [{ label: "FOX", iconKey: "fox" }],
+      isLive: true,
+      state: "in",
+      progress: 91,
+      date: liveStarted,
+      situation: { possession: "DAL", text: "2nd & 6", yardLine: 18, isRedZone: true },
+    },
+    {
+      id: "demo-nba-lal-bos",
+      leagueShort: "NBA",
+      tone: "orange",
+      sport: "basketball",
+      league: "nba",
+      away: "LAL",
+      home: "BOS",
+      awayFull: "Los Angeles Lakers",
+      homeFull: "Boston Celtics",
+      awayLogo: "https://a.espncdn.com/i/teamlogos/nba/500/lal.png",
+      homeLogo: "https://a.espncdn.com/i/teamlogos/nba/500/bos.png",
+      awayScore: "92",
+      homeScore: "94",
+      awayWinning: false,
+      homeWinning: true,
+      status: "4th 5:38",
+      broadcasts: [{ label: "ESPN", iconKey: "espn" }],
+      isLive: true,
+      state: "in",
+      progress: 84,
+      date: liveStarted,
+    },
+    {
+      id: "demo-epl-mu-liv",
+      leagueShort: "EPL",
+      tone: "blue",
+      sport: "soccer",
+      league: "eng.1",
+      away: "MU",
+      home: "LIV",
+      awayFull: "Manchester United",
+      homeFull: "Liverpool",
+      awayLogo: "https://a.espncdn.com/i/teamlogos/soccer/500/360.png",
+      homeLogo: "https://a.espncdn.com/i/teamlogos/soccer/500/364.png",
+      awayScore: "-",
+      homeScore: "-",
+      status: "Upcoming",
+      broadcasts: [{ label: "Peacock", iconKey: "peacock" }],
+      isLive: false,
+      state: "pre",
+      progress: 0,
+      date: demoDate(74),
+    },
+    {
+      id: "demo-f1-session",
+      leagueShort: "F1",
+      tone: "red",
+      sport: null,
+      league: null,
+      away: "F1",
+      home: "Qualifying",
+      awayFull: "Formula 1",
+      homeFull: "Qualifying",
+      awayLogo: "",
+      homeLogo: "",
+      awayScore: "",
+      homeScore: "",
+      status: "Qualifying",
+      broadcasts: [],
+      isLive: false,
+      state: "pre",
+      progress: 0,
+      date: demoDate(22),
+      meetingName: "Demo Grand Prix",
+      location: "Nashville Command Center",
+    },
+  ];
+}
+
+function demoHeadlines() {
+  return [
+    { id: "demo-headline-dal", headline: "Cowboys enter a high-leverage divisional finish", description: "Dallas live alert demo", type: "Demo" },
+    { id: "demo-headline-lal", headline: "Lakers lean on late-game defense in rivalry test", description: "LAL favorite-team demo", type: "Demo" },
+    { id: "demo-headline-f1", headline: "Ferrari setup watch leads F1 qualifying notes", description: "F1 favorite demo", type: "Demo" },
+  ];
+}
+
+function dashboardAlerts(games, settings) {
+  const alerts = [];
+  prioritySortGames(games, settings).forEach((game) => {
+    if (alerts.length >= 6) return;
+    const matchup = gameDisplayName(game);
+    if (game.leagueShort === "NFL" && game.isLive && game.situation?.isRedZone) {
+      alerts.push({ tag: "RED", text: `${matchup} - ${nflSituationLabel(game)}` });
+    } else if (game.isLive && isFavoriteGame(game, settings)) {
+      alerts.push({ tag: "FAV", text: `${matchup} live now` });
+    } else if (game.isLive && gameStatusBadge(game) === "CLOSE") {
+      alerts.push({ tag: "CLS", text: `${matchup} is within one score` });
+    } else if (game.leagueShort === "F1" && game.state === "pre" && new Date(game.date).getTime() - Date.now() < 30 * 60_000) {
+      alerts.push({ tag: "F1", text: `${game.meetingName || "F1"} ${game.home} starts ${formatCountdown(game.date)}` });
+    } else if (game.state === "post" && isFavoriteGame(game, settings)) {
+      alerts.push({ tag: "FIN", text: `${matchup} final` });
+    }
+  });
+  return alerts;
+}
 
 // ─── Shared card components ───────────────────────────────────────────────────
 
@@ -2346,12 +2634,12 @@ const NFL_PANEL_TABS = [
   { key: "news", label: "News" },
 ];
 
-function nflFavoriteTags() {
-  return new Set(favorites.filter((team) => team.meta === "NFL").map((team) => team.tag));
+function nflFavoriteTags(settings) {
+  return new Set(getFavoriteItems(settings).filter((team) => team.meta === "NFL").map((team) => team.tag));
 }
 
-function nflIsFavoriteGame(game) {
-  const tags = nflFavoriteTags();
+function nflIsFavoriteGame(game, settings) {
+  const tags = nflFavoriteTags(settings);
   return tags.has(game.away) || tags.has(game.home);
 }
 
@@ -2381,9 +2669,9 @@ function nflGameTone(game) {
   return "scheduled";
 }
 
-function nflRankGame(game) {
+function nflRankGame(game, settings) {
   const ms = new Date(game.date || 0).getTime() - Date.now();
-  const favoriteBoost = nflIsFavoriteGame(game) ? -12 : 0;
+  const favoriteBoost = nflIsFavoriteGame(game, settings) ? -12 : 0;
   if (game.isLive && game.situation?.isRedZone) return -100 + favoriteBoost;
   if (game.isLive && nflScoreMargin(game) <= 8) return -80 + nflScoreMargin(game) + favoriteBoost;
   if (game.isLive) return -60 + favoriteBoost;
@@ -2391,8 +2679,8 @@ function nflRankGame(game) {
   return 500 + Math.abs(ms / 60_000);
 }
 
-function nflSortGames(games) {
-  return [...games].sort((a, b) => nflRankGame(a) - nflRankGame(b));
+function nflSortGames(games, settings) {
+  return [...games].sort((a, b) => nflRankGame(a, settings) - nflRankGame(b, settings));
 }
 
 function nflRefreshMs(games) {
@@ -2404,9 +2692,9 @@ function nflRefreshMs(games) {
   return soon ? 60_000 : 5 * 60_000;
 }
 
-function nflBuildAlerts(games, selectedGame) {
+function nflBuildAlerts(games, selectedGame, settings) {
   const alerts = [];
-  nflSortGames(games).forEach((game) => {
+  nflSortGames(games, settings).forEach((game) => {
     if (alerts.length >= 5) return;
     const matchup = `${game.away} @ ${game.home}`;
     if (game.isLive && game.situation?.isRedZone) {
@@ -2415,7 +2703,7 @@ function nflBuildAlerts(games, selectedGame) {
       alerts.push({ tag: "1S", text: `${matchup} - one-score game` });
     } else if (game.state === "post") {
       alerts.push({ tag: "FIN", text: `${matchup} final ${game.awayScore}-${game.homeScore}` });
-    } else if (nflIsFavoriteGame(game)) {
+    } else if (nflIsFavoriteGame(game, settings)) {
       alerts.push({ tag: "FAV", text: `${matchup} - ${formatCountdown(game.date)}` });
     }
   });
@@ -2425,11 +2713,11 @@ function nflBuildAlerts(games, selectedGame) {
   return alerts;
 }
 
-function NFLHero({ games, selectedGame }) {
+function NFLHero({ games, selectedGame, settings }) {
   const live = games.filter((game) => game.isLive);
   const redZone = live.filter((game) => game.situation?.isRedZone);
   const oneScore = live.filter((game) => nflScoreMargin(game) <= 8);
-  const alerts = nflBuildAlerts(games, selectedGame);
+  const alerts = nflBuildAlerts(games, selectedGame, settings);
   return (
     <section className="panel nfl-hero-panel">
       <div className="nfl-hero-copy">
@@ -2697,7 +2985,7 @@ function NFLPlayers({ game, detail, loading, teamSnapshots }) {
   );
 }
 
-function NFLInjuries({ detail, loading, leagueInjuries, selectedGame }) {
+function NFLInjuries({ detail, loading, leagueInjuries, selectedGame, settings }) {
   const [filter, setFilter] = useState("impact");
   if (loading && !detail && !leagueInjuries?.length) return <div className="loading-pulse" />;
   const matchupTeams = new Set([selectedGame?.away, selectedGame?.home].filter(Boolean));
@@ -2708,7 +2996,7 @@ function NFLInjuries({ detail, loading, leagueInjuries, selectedGame }) {
     detail: "",
   }));
   const source = leagueInjuries?.length ? leagueInjuries : detailRows;
-  const favoriteTags = nflFavoriteTags();
+  const favoriteTags = nflFavoriteTags(settings);
   const filters = [
     { key: "impact", label: "Impact" },
     { key: "game", label: "Game" },
@@ -2867,7 +3155,7 @@ function NFLNews({ articles }) {
   );
 }
 
-function NFLDataPanel({ activePanel, setActivePanel, game, detail, loading, news, leagueInjuries, standings, teamSnapshots, onOpenModal }) {
+function NFLDataPanel({ activePanel, setActivePanel, game, detail, loading, news, leagueInjuries, standings, teamSnapshots, onOpenModal, settings }) {
   return (
     <section className="panel nfl-data-panel">
       <div className="nfl-data-tabs">
@@ -2880,7 +3168,7 @@ function NFLDataPanel({ activePanel, setActivePanel, game, detail, loading, news
       <div className="nfl-data-body">
         {activePanel === "center" && <NFLGameCenter game={game} detail={detail} loading={loading} onOpenModal={onOpenModal} />}
         {activePanel === "players" && <NFLPlayers game={game} detail={detail} loading={loading} teamSnapshots={teamSnapshots} />}
-        {activePanel === "injuries" && <NFLInjuries detail={detail} loading={loading} leagueInjuries={leagueInjuries} selectedGame={game} />}
+        {activePanel === "injuries" && <NFLInjuries detail={detail} loading={loading} leagueInjuries={leagueInjuries} selectedGame={game} settings={settings} />}
         {activePanel === "teams" && <NFLTeams game={game} detail={detail} loading={loading} teamSnapshots={teamSnapshots} standings={standings} />}
         {activePanel === "standings" && <NFLStandings standings={standings} />}
         {activePanel === "news" && <NFLNews articles={news} />}
@@ -2889,7 +3177,7 @@ function NFLDataPanel({ activePanel, setActivePanel, game, detail, loading, news
   );
 }
 
-function NFLCommandView({ onUpdated, onNextRefresh }) {
+function NFLCommandView({ onUpdated, onNextRefresh, settings, onPinFavorite }) {
   const [games, setGames] = useState([]);
   const [news, setNews] = useState([]);
   const [leagueInjuries, setLeagueInjuries] = useState([]);
@@ -2923,15 +3211,19 @@ function NFLCommandView({ onUpdated, onNextRefresh }) {
       fetchNews("football", "nfl"),
       slowDataPromise,
     ]);
-    const normalized = nflSortGames(scoreboard.map((event) => parseESPNEvent(event, "NFL", "green", "football", "nfl")));
-    setGames(normalized);
-    setNews(headlines);
-    setLeagueInjuries(slowData.injuries || []);
+    const normalized = nflSortGames(scoreboard.map((event) => parseESPNEvent(event, "NFL", "green", "football", "nfl")), settings);
+    const demoGames = normalizeNashSettings(settings).demoMode && normalized.length === 0
+      ? demoDashboardEvents().filter((game) => game.leagueShort === "NFL")
+      : [];
+    const gamesWithDemo = demoGames.length ? nflSortGames(demoGames, settings) : normalized;
+    setGames(gamesWithDemo);
+    setNews(favoriteHeadlineFilter(normalizeNashSettings(settings).demoMode ? [...demoHeadlines(), ...headlines] : headlines, settings));
+    setLeagueInjuries(sortNFLInjuries(slowData.injuries || [], settings));
     setStandings(slowData.standings || { season: "", conferences: [], divisions: [] });
-    setSelectedId((prev) => normalized.some((game) => game.id === prev) ? prev : (normalized[0]?.id || ""));
-    setError(normalized.length ? "" : "No NFL scoreboard returned.");
+    setSelectedId((prev) => gamesWithDemo.some((game) => game.id === prev) ? prev : (gamesWithDemo[0]?.id || ""));
+    setError(gamesWithDemo.length ? "" : "No NFL scoreboard returned.");
     setLoading(false);
-    const refreshMs = nflRefreshMs(normalized);
+    const refreshMs = nflRefreshMs(gamesWithDemo);
     const now = new Date();
     onUpdated?.(now);
     onNextRefresh?.(new Date(Date.now() + refreshMs));
@@ -3008,11 +3300,11 @@ function NFLCommandView({ onUpdated, onNextRefresh }) {
     <>
       {modalGame && (
         <ModalErrorBoundary onClose={() => setModalGame(null)}>
-          <GameCenterModal game={modalGame} onClose={() => setModalGame(null)} />
+          <GameCenterModal game={modalGame} onClose={() => setModalGame(null)} onPinFavorite={onPinFavorite} />
         </ModalErrorBoundary>
       )}
       <main className="nfl-view">
-        <NFLHero games={games} selectedGame={selectedGame} />
+        <NFLHero games={games} selectedGame={selectedGame} settings={settings} />
         <LiveScoreTicker games={games} title="NFL Live" onSelectGame={(game) => setSelectedId(game.id)} />
         {error && <div className="halo-f1-feed-note">{error}</div>}
         <NFLSlate games={games} selectedId={selectedGame?.id || selectedId} setSelectedId={setSelectedId} loading={loading} />
@@ -3027,6 +3319,7 @@ function NFLCommandView({ onUpdated, onNextRefresh }) {
           standings={standings}
           teamSnapshots={teamSnapshots}
           onOpenModal={() => selectedGame && setModalGame(selectedGame)}
+          settings={settings}
         />
       </main>
     </>
@@ -3917,7 +4210,7 @@ function GameCenterStory({ detail }) {
   );
 }
 
-function GameCenterModal({ game, onClose }) {
+function GameCenterModal({ game, onClose, onPinFavorite }) {
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailUpdatedAt, setDetailUpdatedAt] = useState(null);
@@ -4132,6 +4425,18 @@ function GameCenterModal({ game, onClose }) {
 
         <footer className="gc-actions">
           <span>{detailUpdatedAt ? `Updated ${detailUpdatedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : "ESPN detail feed"}</span>
+          {!isF1 && onPinFavorite && (
+            <div className="gc-pin-actions">
+              {["away", "home"].map((side) => {
+                const item = favoriteFromGame(game, side);
+                return item ? (
+                  <button className="modal-btn" key={side} onClick={() => onPinFavorite(item)}>
+                    <Icon name="star" size={14} /> Pin {item.tag}
+                  </button>
+                ) : null;
+              })}
+            </div>
+          )}
           {!isF1 && (
             <button className="modal-btn" onClick={() => window.open(espnGameUrl(game), "_blank")}>
               <Icon name="link" size={14} /> ESPN
@@ -4597,6 +4902,212 @@ function GameDetailModal({ game, onClose }) {
 
 const GAMES_PAGE = 6;
 
+function toggleListValue(list, value) {
+  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
+function DensityPicker({ value, onChange }) {
+  return (
+    <div className="settings-choice-grid density-choice-grid">
+      {DASHBOARD_DENSITIES.map((mode) => (
+        <button
+          className={`settings-choice-card ${value === mode.key ? "active" : ""}`}
+          key={mode.key}
+          onClick={() => onChange(mode.key)}
+          type="button"
+        >
+          <strong>{mode.label}</strong>
+          <span>{mode.meta}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FavoritePicker({ selectedTags, onChange }) {
+  const selected = new Set(selectedTags);
+  return (
+    <div className="settings-chip-grid favorite-picker-grid">
+      {FAVORITE_OPTIONS.map((team) => (
+        <button
+          className={`settings-chip-card ${selected.has(team.tag) ? "active" : ""}`}
+          key={`${team.meta}-${team.tag}`}
+          onClick={() => onChange(toggleListValue(selectedTags, team.tag))}
+          type="button"
+        >
+          <TeamMark label={team.tag} logo={team.logo} tone={favoriteTone(team.meta)} size="sm" />
+          <span>{team.tag}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function LeaguePicker({ selectedLeagues, onChange }) {
+  const selected = new Set(selectedLeagues);
+  return (
+    <div className="settings-chip-grid league-picker-grid">
+      {LEAGUE_OPTIONS.map((league) => (
+        <button
+          className={`settings-chip-card league-chip ${selected.has(league.key) ? "active" : ""}`}
+          key={league.key}
+          onClick={() => onChange(toggleListValue(selectedLeagues, league.key))}
+          type="button"
+        >
+          <strong>{league.label}</strong>
+          <span>{league.meta}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FirstRunWizard({ settings, onSave, onClose }) {
+  const [step, setStep] = useState(0);
+  const [draft, setDraft] = useState(() => normalizeNashSettings(settings));
+  const steps = ["Screen", "Favorites", "Services", "Mode"];
+
+  function patchDraft(patch) {
+    setDraft((prev) => normalizeNashSettings({ ...prev, ...patch }));
+  }
+
+  function finish(extra = {}) {
+    onSave(normalizeNashSettings({ ...draft, ...extra, onboardingComplete: true }));
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-panel first-run-panel">
+        <div className="modal-header">
+          <strong style={{ fontSize: 17 }}>NashTrack Setup</strong>
+          <button className="modal-close" onClick={() => finish()}><Icon name="x" size={18} /></button>
+        </div>
+
+        <div className="wizard-stepper" aria-label="Setup progress">
+          {steps.map((label, index) => (
+            <button
+              className={index === step ? "active" : index < step ? "done" : ""}
+              key={label}
+              onClick={() => setStep(index)}
+              type="button"
+            >
+              <span>{index + 1}</span>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {step === 0 && (
+          <section className="wizard-page">
+            <div className="wizard-copy">
+              <span>Display</span>
+              <h2>Screen Profile</h2>
+            </div>
+            <div className="wizard-screen-grid">
+              <button className="settings-choice-card active" type="button">
+                <strong>800x480</strong>
+                <span>7 inch Pi panel</span>
+              </button>
+              <button
+                className={`settings-choice-card ${draft.screenMode === DEFAULT_SCREEN_MODE ? "active" : ""}`}
+                onClick={() => patchDraft({ screenMode: DEFAULT_SCREEN_MODE })}
+                type="button"
+              >
+                <strong>Always On</strong>
+                <span>Desk mode</span>
+              </button>
+              <button
+                className={`settings-choice-card ${draft.screenMode === SCREEN_SLEEP_MODE ? "active" : ""}`}
+                onClick={() => patchDraft({ screenMode: SCREEN_SLEEP_MODE })}
+                type="button"
+              >
+                <strong>Sleep 3m</strong>
+                <span>Touch wakes</span>
+              </button>
+            </div>
+            <p className="settings-display-note">Touch targets are tuned for the 7 inch screen. Brightness and calibration stay in Raspberry Pi OS for now.</p>
+          </section>
+        )}
+
+        {step === 1 && (
+          <section className="wizard-page">
+            <div className="wizard-copy">
+              <span>Favorites</span>
+              <h2>Teams And Leagues</h2>
+            </div>
+            <FavoritePicker selectedTags={draft.favoriteTags} onChange={(favoriteTags) => patchDraft({ favoriteTags })} />
+            <LeaguePicker selectedLeagues={draft.preferredLeagues} onChange={(preferredLeagues) => patchDraft({ preferredLeagues })} />
+          </section>
+        )}
+
+        {step === 2 && (
+          <section className="wizard-page">
+            <div className="wizard-copy">
+              <span>Services</span>
+              <h2>Pi Behavior</h2>
+            </div>
+            <div className="settings-choice-grid">
+              <button
+                className={`settings-choice-card ${draft.autoUpdates ? "active" : ""}`}
+                onClick={() => patchDraft({ autoUpdates: !draft.autoUpdates })}
+                type="button"
+              >
+                <strong>Auto Update</strong>
+                <span>{draft.autoUpdates ? "On" : "Manual"}</span>
+              </button>
+              <button
+                className={`settings-choice-card ${draft.headlineCycling !== false ? "active" : ""}`}
+                onClick={() => patchDraft({ headlineCycling: draft.headlineCycling === false })}
+                type="button"
+              >
+                <strong>Headlines</strong>
+                <span>{draft.headlineCycling !== false ? "Cycle" : "Pinned"}</span>
+              </button>
+              <button
+                className={`settings-choice-card ${draft.googleToken ? "active" : ""}`}
+                type="button"
+              >
+                <strong>Calendar</strong>
+                <span>{draft.googleToken ? "Connected" : "Later"}</span>
+              </button>
+            </div>
+          </section>
+        )}
+
+        {step === 3 && (
+          <section className="wizard-page">
+            <div className="wizard-copy">
+              <span>Dashboard</span>
+              <h2>Density And Data</h2>
+            </div>
+            <DensityPicker value={draft.dashboardDensity} onChange={(dashboardDensity) => patchDraft({ dashboardDensity })} />
+            <div className="settings-choice-grid">
+              <button
+                className={`settings-choice-card ${draft.demoMode ? "active" : ""}`}
+                onClick={() => patchDraft({ demoMode: !draft.demoMode })}
+                type="button"
+              >
+                <strong>Demo Mode</strong>
+                <span>{draft.demoMode ? "On" : "Off"}</span>
+              </button>
+            </div>
+          </section>
+        )}
+
+        <div className="wizard-actions">
+          <button className="modal-btn" disabled={step === 0} onClick={() => setStep((value) => Math.max(0, value - 1))}>Back</button>
+          <button className="modal-btn" onClick={() => finish({ onboardingComplete: true })}>Skip</button>
+          {step < steps.length - 1 ? (
+            <button className="modal-btn primary" onClick={() => setStep((value) => Math.min(steps.length - 1, value + 1))}>Next</button>
+          ) : (
+            <button className="modal-btn primary" onClick={() => finish()}>Finish</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GamesSection({ liveGames, recentGames, upcomingGames, loading, onSelectGame, activeTab, setActiveTab, lastUpdated }) {
   const [showAll, setShowAll] = useState(false);
   const tabOrder = ["recent", "live", "soon"];
@@ -4676,6 +5187,7 @@ function GamesSection({ liveGames, recentGames, upcomingGames, loading, onSelect
 // ─── Settings modal ──────────────────────────────────────────────────────────
 
 function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
+  const normalizedSettings = normalizeNashSettings(settings);
   const [clientId, setClientId] = useState(settings.googleClientId || "");
   const [updateStatus, setUpdateStatus] = useState({ state: "idle", message: "", output: "" });
   const [displayStatus, setDisplayStatus] = useState({ state: "idle", message: "", output: "" });
@@ -4742,10 +5254,14 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
 
   function handleBackdrop(e) { if (e.target === e.currentTarget) onClose(); }
 
+  function handlePreferencePatch(patch) {
+    onSave(normalizeNashSettings({ ...settings, ...patch }));
+  }
+
   function handleConnect() {
     const id = clientId.trim();
     if (!id) return;
-    onSave({ ...settings, googleClientId: id });
+    handlePreferencePatch({ googleClientId: id });
     onConnect(id);
   }
 
@@ -4770,8 +5286,7 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
   }
 
   async function handleScreenMode(mode) {
-    const next = { ...settings, screenMode: mode };
-    onSave(next);
+    handlePreferencePatch({ screenMode: mode });
     setDisplayStatus({
       state: "running",
       message: mode === SCREEN_SLEEP_MODE ? "Enabling 3 minute sleep..." : "Switching to always on...",
@@ -4821,11 +5336,11 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
   }
 
   function handleHeadlineCycling(enabled) {
-    onSave({ ...settings, headlineCycling: enabled });
+    handlePreferencePatch({ headlineCycling: enabled });
   }
 
   function handleAutoUpdates(enabled) {
-    onSave({ ...settings, autoUpdates: enabled });
+    handlePreferencePatch({ autoUpdates: enabled });
     setUpdateStatus({
       state: enabled ? "success" : "idle",
       message: enabled
@@ -5046,6 +5561,70 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
 
         <p className="settings-section-label">Dashboard</p>
 
+        <div className="settings-service-card settings-preference-card">
+          <div className="settings-preference-head">
+            <div className="settings-service-info">
+              <strong>Dashboard density</strong>
+              <span className="muted-text">Choose the home screen shape for the Pi.</span>
+            </div>
+          </div>
+          <DensityPicker
+            value={normalizedSettings.dashboardDensity}
+            onChange={(dashboardDensity) => handlePreferencePatch({ dashboardDensity })}
+          />
+        </div>
+
+        <div className="settings-service-card settings-preference-card">
+          <div className="settings-preference-head">
+            <div className="settings-service-info">
+              <strong>Demo data</strong>
+              <span className={normalizedSettings.demoMode ? "connected-text" : "muted-text"}>
+                {normalizedSettings.demoMode ? "Sample games fill quiet feeds" : "Live feeds only"}
+              </span>
+            </div>
+            <div className="settings-mode-toggle" role="group" aria-label="Demo data">
+              <button
+                className={`settings-mode-btn ${normalizedSettings.demoMode ? "active" : ""}`}
+                onClick={() => handlePreferencePatch({ demoMode: true })}
+              >
+                On
+              </button>
+              <button
+                className={`settings-mode-btn ${!normalizedSettings.demoMode ? "active" : ""}`}
+                onClick={() => handlePreferencePatch({ demoMode: false })}
+              >
+                Off
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="settings-service-card settings-preference-card">
+          <div className="settings-preference-head">
+            <div className="settings-service-info">
+              <strong>Favorite teams and drivers</strong>
+              <span className="muted-text">Favorites sort higher across games, alerts, news, and injuries.</span>
+            </div>
+          </div>
+          <FavoritePicker
+            selectedTags={normalizedSettings.favoriteTags}
+            onChange={(favoriteTags) => handlePreferencePatch({ favoriteTags })}
+          />
+        </div>
+
+        <div className="settings-service-card settings-preference-card">
+          <div className="settings-preference-head">
+            <div className="settings-service-info">
+              <strong>Dashboard leagues</strong>
+              <span className="muted-text">Turn leagues off here to hide them from the all-sports dashboard.</span>
+            </div>
+          </div>
+          <LeaguePicker
+            selectedLeagues={normalizedSettings.preferredLeagues}
+            onChange={(preferredLeagues) => handlePreferencePatch({ preferredLeagues })}
+          />
+        </div>
+
         <div className="settings-service-card">
           <div className="settings-service-header">
             <span className="settings-service-icon settings-service-icon-box">NEWS</span>
@@ -5147,9 +5726,12 @@ function Sidebar({ lastUpdated, nextRefresh, onOpenSettings, activeView, onNavig
           const view = NAV_VIEW[label] || label.toLowerCase();
           return (
             <button
+              aria-current={activeView === view ? "page" : undefined}
+              aria-label={`Open ${label}`}
               className={`nav-item ${activeView === view ? "active" : ""} ${tone || ""}`}
               key={label}
               onClick={() => onNavigate(view)}
+              type="button"
             >
               <Icon name={icon} size={22} />
               <span className="nav-copy"><strong>{label}</strong><small>{meta}</small></span>
@@ -5163,9 +5745,12 @@ function Sidebar({ lastUpdated, nextRefresh, onOpenSettings, activeView, onNavig
           const view = label.toLowerCase();
           return (
             <button
+              aria-current={activeView === view ? "page" : undefined}
+              aria-label={label === "Settings" ? "Open Settings" : `Open ${label}`}
               className={`nav-item ${activeView === view ? "active" : ""}`}
               key={label}
               onClick={label === "Settings" ? onOpenSettings : () => onNavigate(view)}
+              type="button"
             >
               <Icon name={icon} size={21} />
               <span className="nav-copy"><strong>{label}</strong><small>{meta}</small></span>
@@ -5281,7 +5866,7 @@ function SleepControl({ screenMode, onSetScreenMode, onSleepNow }) {
   );
 }
 
-function Header({ weather, screenMode, onSetScreenMode, onSleepNow }) {
+function Header({ weather, screenMode, onSetScreenMode, onSleepNow, onHome }) {
   const now = useClock();
   const timeStr = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   const tzStr = now.toLocaleTimeString("en-US", { timeZoneName: "short" }).split(" ").pop();
@@ -5296,6 +5881,10 @@ function Header({ weather, screenMode, onSetScreenMode, onSleepNow }) {
         <p>Here's what's happening in your sports world.</p>
       </div>
       <div className="system-strip">
+        <button className="home-control" onClick={onHome} type="button">
+          <Icon name="home" size={15} />
+          <span>Home</span>
+        </button>
         <div className="time-block">
           <strong>{timeStr}</strong>
           <span>{tzStr}</span>
@@ -5444,12 +6033,13 @@ function CalendarPanel({ googleEvents = [], connected = false, sportsGames = [] 
   );
 }
 
-function FavoritesPanel() {
+function FavoritesPanel({ settings }) {
+  const favoriteItems = getFavoriteItems(settings);
   return (
     <section className="panel side-card">
       <div className="side-title"><h2>Favorites</h2></div>
       <div className="favorite-list">
-        {favorites.map(({ name, meta, tag, logo }) => (
+        {favoriteItems.map(({ name, meta, tag, logo }) => (
           <div className="favorite-row" key={name}>
             <div className="mini-logo">
               {logo
@@ -5610,18 +6200,29 @@ function eventsToUpcomingPanel(events, count = 4) {
     }));
 }
 
-function FavoritesView({ onUpdated, onNextRefresh }) {
+function FavoritesView({ onUpdated, onNextRefresh, settings }) {
   const [events, setEvents] = useState([]);
+  const [headlines, setHeadlines] = useState([]);
   const [loading, setLoading] = useState(true);
-  const tags = new Set(favorites.map((team) => team.tag));
+  const favoriteItems = getFavoriteItems(settings);
+  const tags = getFavoriteTags(settings);
 
   useEffect(() => {
     let cancelled = false;
     let timerId;
     async function load() {
-      const all = await fetchAllSportsEvents();
+      const [all, newsBuckets] = await Promise.all([
+        fetchAllSportsEvents(),
+        Promise.all([
+          fetchNews("football", "nfl"),
+          fetchNews("basketball", "nba"),
+          fetchNews("soccer", "eng.1"),
+          fetchNews("racing", "f1"),
+        ]),
+      ]);
       if (cancelled) return;
-      setEvents(all.filter((game) => tags.has(game.away) || tags.has(game.home)));
+      setEvents(prioritySortGames(all.filter((game) => tags.has(game.away) || tags.has(game.home)), settings));
+      setHeadlines(favoriteHeadlineFilter(newsBuckets.flat(), settings).slice(0, 5));
       setLoading(false);
       const now = new Date();
       onUpdated?.(now);
@@ -5630,7 +6231,7 @@ function FavoritesView({ onUpdated, onNextRefresh }) {
     }
     load();
     return () => { cancelled = true; clearTimeout(timerId); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(normalizeNashSettings(settings).favoriteTags)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <main className="utility-view favorites-view">
@@ -5639,12 +6240,12 @@ function FavoritesView({ onUpdated, onNextRefresh }) {
           <span>Favorites</span>
           <h2>Saved Teams</h2>
         </div>
-        <strong>{favorites.length}</strong>
+        <strong>{favoriteItems.length}</strong>
       </section>
       <section className="panel favorite-team-grid">
-        {favorites.map(({ name, meta, tag, logo }) => (
+        {favoriteItems.map(({ name, meta, tag, logo }) => (
           <article className="favorite-team-card" key={name}>
-            <TeamMark label={tag} logo={logo} tone={meta === "NFL" ? "green" : meta === "NBA" ? "orange" : meta === "F1 team" ? "red" : "blue"} />
+            <TeamMark label={tag} logo={logo} tone={favoriteTone(meta)} />
             <div className="row-copy"><strong>{name}</strong><span>{meta}</span></div>
             <Icon name="star" size={15} filled />
           </article>
@@ -5673,6 +6274,7 @@ function FavoritesView({ onUpdated, onNextRefresh }) {
           <p className="gcal-empty">No favorite-team games in the current feeds.</p>
         )}
       </section>
+      <HeadlinesRail articles={headlines} />
     </main>
   );
 }
@@ -5712,7 +6314,7 @@ const SPORT_COMMAND_CONFIG = {
   soccer: { sport: "soccer", league: "eng.1", leagueShort: "EPL", tone: "blue", title: "EPL Matchday" },
 };
 
-function SportCommandView({ config, onUpdated, onNextRefresh }) {
+function SportCommandView({ config, onUpdated, onNextRefresh, settings, onPinFavorite }) {
   const [games, setGames] = useState([]);
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -5723,6 +6325,7 @@ function SportCommandView({ config, onUpdated, onNextRefresh }) {
   const loadRef = useRef(null);
 
   loadRef.current = async function loadSportView() {
+    const normalizedSettings = normalizeNashSettings(settings);
     const [scoreboard, headlines] = await Promise.all([
       fetchScoreboard(config.sport, config.league),
       fetchNews(config.sport, config.league),
@@ -5730,13 +6333,17 @@ function SportCommandView({ config, onUpdated, onNextRefresh }) {
     const normalized = scoreboard.map((event) =>
       parseESPNEvent(event, config.leagueShort, config.tone, config.sport, config.league)
     );
-    const live = normalized.filter((game) => game.isLive);
-    const soon = normalized.filter((game) => !game.isLive && game.state !== "post");
+    const demoGames = normalizedSettings.demoMode && normalized.length === 0
+      ? demoDashboardEvents().filter((game) => game.leagueShort === config.leagueShort)
+      : [];
+    const gamesWithDemo = prioritySortGames(demoGames.length ? demoGames : normalized, normalizedSettings);
+    const live = gamesWithDemo.filter((game) => game.isLive);
+    const soon = gamesWithDemo.filter((game) => !game.isLive && game.state !== "post");
     soonCountRef.current = soon.filter((game) => new Date(game.date).getTime() - Date.now() < 30 * 60_000).length;
-    setGames(normalized);
-    setNews(headlines);
+    setGames(gamesWithDemo);
+    setNews(favoriteHeadlineFilter(normalizedSettings.demoMode ? [...demoHeadlines(), ...headlines] : headlines, normalizedSettings));
     setLoading(false);
-    setSelectedGame((prev) => prev ? (normalized.find((game) => game.id === prev.id) || prev) : prev);
+    setSelectedGame((prev) => prev ? (gamesWithDemo.find((game) => game.id === prev.id) || prev) : prev);
     if (firstLoadRef.current) {
       firstLoadRef.current = false;
       if (live.length) setActiveTab("live");
@@ -5772,7 +6379,7 @@ function SportCommandView({ config, onUpdated, onNextRefresh }) {
     <>
       {selectedGame && (
         <ModalErrorBoundary onClose={() => setSelectedGame(null)}>
-          <GameCenterModal game={selectedGame} onClose={() => setSelectedGame(null)} />
+          <GameCenterModal game={selectedGame} onClose={() => setSelectedGame(null)} onPinFavorite={onPinFavorite} />
         </ModalErrorBoundary>
       )}
       <main className="sport-command-view">
@@ -5793,7 +6400,73 @@ function SportCommandView({ config, onUpdated, onNextRefresh }) {
   );
 }
 
-function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh, settings }) {
+function DashboardAlertRail({ games, settings }) {
+  const alerts = dashboardAlerts(games, settings);
+  const fallback = prioritySortGames(games.filter((game) => game.state !== "post"), settings)
+    .slice(0, 3)
+    .map((game) => ({ tag: "NEXT", text: `${gameDisplayName(game)} - ${formatGameTime(game.date)}` }));
+  const rows = alerts.length ? alerts : fallback;
+
+  return (
+    <section className="panel dashboard-alert-rail">
+      <div className="alert-rail-title">
+        <span>Now</span>
+        <strong>{alerts.length ? "Alerts" : "Next Up"}</strong>
+      </div>
+      <div className="alert-rail-rows">
+        {rows.length ? rows.map((alert, index) => (
+          <div className="alert-rail-row" key={`${alert.tag}-${index}`}>
+            <span>{alert.tag}</span>
+            <strong>{alert.text}</strong>
+          </div>
+        )) : <p className="gcal-empty">No games today. Check Later for the next slate.</p>}
+      </div>
+    </section>
+  );
+}
+
+function NightstandDashboard({ games, weather, settings }) {
+  const now = useClock();
+  const nextGame = prioritySortGames(games.filter((game) => game.state !== "post"), settings).find(Boolean);
+  const timeStr = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const dateStr = now.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+
+  return (
+    <section className="panel nightstand-panel">
+      <div className="nightstand-clock">
+        <strong>{timeStr}</strong>
+        <span>{dateStr}</span>
+      </div>
+      <div className="nightstand-context">
+        {weather && (
+          <div className="nightstand-weather">
+            <Icon name={weather.icon} size={28} />
+            <div>
+              <strong>{weather.temp}F</strong>
+              <span>{weather.desc}</span>
+            </div>
+          </div>
+        )}
+        <div className="nightstand-next">
+          <span>Next</span>
+          {nextGame ? (
+            <>
+              <strong>{gameDisplayName(nextGame)}</strong>
+              <em>{formatGameTime(nextGame.date)}</em>
+            </>
+          ) : (
+            <>
+              <strong>No upcoming games in feed</strong>
+              <em>Demo mode can fill quiet stretches.</em>
+            </>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh, settings, weather, onPinFavorite }) {
   const [liveGames,     setLiveGames]     = useState([]);
   const [recentGames,   setRecentGames]   = useState([]);
   const [upcomingGames, setUpcomingGames] = useState([]);
@@ -5810,14 +6483,18 @@ function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh, se
   const soonCountRef = useRef(0);
 
   doLoadRef.current = async function load() {
+    const normalizedSettings = normalizeNashSettings(settings);
     const [allEvents, newsArticles] = await Promise.all([
       fetchAllSportsEvents(),
       fetchNews("basketball", "nba"),
     ]);
+    const eventsWithDemo = normalizedSettings.demoMode ? [...demoDashboardEvents(), ...allEvents] : allEvents;
+    const visibleEvents = prioritySortGames(eventsWithDemo.filter((game) => leagueVisible(game, normalizedSettings)), normalizedSettings);
+    const headlineFeed = normalizedSettings.demoMode ? [...demoHeadlines(), ...newsArticles] : newsArticles;
 
-    const live   = allEvents.filter((g) => g.isLive);
-    const recent = allEvents.filter((g) => g.state === "post");
-    const soon   = allEvents.filter((g) => !g.isLive && g.state !== "post");
+    const live   = prioritySortGames(visibleEvents.filter((g) => g.isLive), normalizedSettings);
+    const recent = prioritySortGames(visibleEvents.filter((g) => g.state === "post"), normalizedSettings);
+    const soon   = prioritySortGames(visibleEvents.filter((g) => !g.isLive && g.state !== "post"), normalizedSettings);
 
     liveCountRef.current = live.length;
     // Count games within 30min of starting OR overdue (started in last 3h but still "pre")
@@ -5830,7 +6507,7 @@ function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh, se
     setLiveGames(live);
     setRecentGames(recent);
     setUpcomingGames(soon);
-    setHeadlines(newsArticles);
+    setHeadlines(favoriteHeadlineFilter(headlineFeed, normalizedSettings));
     setUpcomingPanel(
       soon.slice(0, 3).map((g) => ({
         name: g.leagueShort === "F1"
@@ -5845,7 +6522,7 @@ function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh, se
     // Sync open modal — update snapshot when game state changes
     setSelectedGame((prev) => {
       if (!prev) return prev;
-      const fresh = allEvents.find((g) => g.id === prev.id);
+      const fresh = visibleEvents.find((g) => g.id === prev.id);
       return fresh || prev;
     });
 
@@ -5880,39 +6557,50 @@ function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh, se
     return () => clearTimeout(timerId);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const normalizedSettings = normalizeNashSettings(settings);
+  const dashboardGames = [...liveGames, ...upcomingGames, ...recentGames];
+  const density = normalizedSettings.dashboardDensity;
+
   return (
     <>
       {selectedGame && (
         <ModalErrorBoundary onClose={() => setSelectedGame(null)}>
-          <GameCenterModal game={selectedGame} onClose={() => setSelectedGame(null)} />
+          <GameCenterModal game={selectedGame} onClose={() => setSelectedGame(null)} onPinFavorite={onPinFavorite} />
         </ModalErrorBoundary>
       )}
-      <main className="dashboard">
+      <main className={`dashboard dashboard-${density}${normalizedSettings.demoMode ? " demo-mode" : ""}`}>
         <div className="primary-column">
-          <LiveScoreTicker
-            games={[...liveGames, ...upcomingGames, ...recentGames]}
-            title="All Sports Live"
-            onSelectGame={setSelectedGame}
-          />
-          <CalendarPanel
-            googleEvents={googleEvents}
-            connected={googleConnected}
-            sportsGames={[...liveGames, ...upcomingGames, ...recentGames]}
-          />
-          <GamesSection
-            liveGames={liveGames}
-            recentGames={recentGames}
-            upcomingGames={upcomingGames}
-            loading={loading}
-            onSelectGame={setSelectedGame}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            lastUpdated={lastUpdated}
-          />
+          {density === "nightstand" ? (
+            <NightstandDashboard games={dashboardGames} weather={weather} settings={normalizedSettings} />
+          ) : (
+            <>
+              <LiveScoreTicker
+                games={dashboardGames}
+                title="All Sports Live"
+                onSelectGame={setSelectedGame}
+              />
+              <DashboardAlertRail games={dashboardGames} settings={normalizedSettings} />
+              <CalendarPanel
+                googleEvents={googleEvents}
+                connected={googleConnected}
+                sportsGames={dashboardGames}
+              />
+              <GamesSection
+                liveGames={liveGames}
+                recentGames={recentGames}
+                upcomingGames={upcomingGames}
+                loading={loading}
+                onSelectGame={setSelectedGame}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                lastUpdated={lastUpdated}
+              />
+            </>
+          )}
         </div>
 
         <aside className="right-column">
-          <HeadlinesRail articles={headlines} cycling={settings?.headlineCycling !== false} />
+          <HeadlinesRail articles={headlines} cycling={normalizedSettings.headlineCycling} />
           <UpcomingPanel events={upcomingPanel} />
         </aside>
       </main>
@@ -5953,8 +6641,7 @@ function App() {
     sessionStorage.setItem("gtoken", token);
     setGoogleToken(token);
     const next = { ...settings, googleToken: true };
-    setSettings(next);
-    localStorage.setItem(NASH_SETTINGS_KEY, JSON.stringify(next));
+    saveSettings(next);
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -5968,8 +6655,7 @@ function App() {
         setGoogleToken(null);
         setCalEvents([]);
         const next = { ...settings, googleToken: false };
-        setSettings(next);
-        localStorage.setItem(NASH_SETTINGS_KEY, JSON.stringify(next));
+        saveSettings(next);
       } else {
         setCalEvents(events);
       }
@@ -5977,8 +6663,9 @@ function App() {
   }, [googleToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function saveSettings(next) {
-    setSettings(next);
-    localStorage.setItem(NASH_SETTINGS_KEY, JSON.stringify(next));
+    const normalized = normalizeNashSettings(next);
+    setSettings(normalized);
+    localStorage.setItem(NASH_SETTINGS_KEY, JSON.stringify(normalized));
   }
 
   function connectGoogle(clientId) {
@@ -5996,8 +6683,18 @@ function App() {
     setGoogleToken(null);
     setCalEvents([]);
     const next = { ...settings, googleToken: false };
-    setSettings(next);
-    localStorage.setItem(NASH_SETTINGS_KEY, JSON.stringify(next));
+    saveSettings(next);
+  }
+
+  function pinFavorite(item) {
+    if (!item?.tag) return;
+    const normalized = normalizeNashSettings(settings);
+    const favoriteTags = Array.from(new Set([...normalized.favoriteTags, item.tag]));
+    saveSettings({
+      ...normalized,
+      favoriteTags,
+      favoriteOverrides: { ...normalized.favoriteOverrides, [item.tag]: item },
+    });
   }
 
   async function checkForUpdatePrompt() {
@@ -6089,15 +6786,13 @@ function App() {
   }
 
   async function setScreenModeFromTopbar(mode) {
-    const next = { ...settings, screenMode: mode };
-    saveSettings(next);
+    saveSettings({ ...settings, screenMode: mode });
     await postDisplayService("/display", { mode });
   }
 
   async function sleepNowFromTopbar() {
     if (settings.screenMode !== SCREEN_SLEEP_MODE) {
-      const next = { ...settings, screenMode: SCREEN_SLEEP_MODE };
-      saveSettings(next);
+      saveSettings({ ...settings, screenMode: SCREEN_SLEEP_MODE });
       await postDisplayService("/display", { mode: SCREEN_SLEEP_MODE });
     }
     await postDisplayService("/display/power", { state: "off" });
@@ -6135,6 +6830,13 @@ function App() {
 
   return (
     <div className="app-shell">
+      {!settings.onboardingComplete && (
+        <FirstRunWizard
+          settings={settings}
+          onSave={saveSettings}
+          onClose={() => saveSettings({ ...settings, onboardingComplete: true })}
+        />
+      )}
       {showSettings && (
         <SettingsModal
           settings={settings}
@@ -6165,19 +6867,20 @@ function App() {
           screenMode={settings.screenMode || DEFAULT_SCREEN_MODE}
           onSetScreenMode={setScreenModeFromTopbar}
           onSleepNow={sleepNowFromTopbar}
+          onHome={() => navigateView("dashboard")}
         />
         {activeView === "f1" ? (
           <F1ErrorBoundary>
             <F1CommandView onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} />
           </F1ErrorBoundary>
         ) : activeView === "football" ? (
-          <NFLCommandView onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} />
+          <NFLCommandView onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} settings={settings} onPinFavorite={pinFavorite} />
         ) : activeView === "basketball" ? (
-          <SportCommandView config={SPORT_COMMAND_CONFIG.basketball} onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} />
+          <SportCommandView config={SPORT_COMMAND_CONFIG.basketball} onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} settings={settings} onPinFavorite={pinFavorite} />
         ) : activeView === "soccer" ? (
-          <SportCommandView config={SPORT_COMMAND_CONFIG.soccer} onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} />
+          <SportCommandView config={SPORT_COMMAND_CONFIG.soccer} onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} settings={settings} onPinFavorite={pinFavorite} />
         ) : activeView === "favorites" ? (
-          <FavoritesView onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} />
+          <FavoritesView onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} settings={settings} />
         ) : activeView === "calendar" ? (
           <CalendarView
             googleEvents={calEvents}
@@ -6192,6 +6895,8 @@ function App() {
             googleEvents={calEvents}
             googleConnected={!!googleToken}
             settings={settings}
+            weather={weather}
+            onPinFavorite={pinFavorite}
           />
         )}
         <footer className="footer-bar">
