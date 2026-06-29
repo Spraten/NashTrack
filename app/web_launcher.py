@@ -309,31 +309,41 @@ def _x11_output_name() -> str:
 def _display_power_commands(state: str) -> list[list[str]]:
     value = "1" if state == "on" else "0"
     commands: list[list[str]] = []
+    prefer_wayland = bool(os.environ.get("WAYLAND_DISPLAY")) or os.environ.get("XDG_SESSION_TYPE") == "wayland"
+
+    def add_wayland_commands() -> None:
+        wlopm = shutil.which("wlopm")
+        if wlopm:
+            commands.append([wlopm, f"--{state}", _wlr_output_name()])
+
+        wlr_randr = shutil.which("wlr-randr")
+        if wlr_randr:
+            commands.append([wlr_randr, "--output", _wlr_output_name(), f"--{state}"])
+
+    def add_x11_commands() -> None:
+        xset = shutil.which("xset")
+        if xset and os.environ.get("DISPLAY"):
+            commands.append([xset, "dpms", "force", state])
+
+        xrandr = shutil.which("xrandr")
+        if xrandr and os.environ.get("DISPLAY"):
+            output = _x11_output_name()
+            commands.append([xrandr, "--output", output, "--auto" if state == "on" else "--off"])
+
+    if prefer_wayland:
+        add_wayland_commands()
+        add_x11_commands()
+    else:
+        add_x11_commands()
+        add_wayland_commands()
+
+    swaymsg = shutil.which("swaymsg")
+    if swaymsg and prefer_wayland:
+        commands.append([swaymsg, "output", "*", "dpms", state])
 
     vcgencmd = shutil.which("vcgencmd")
     if vcgencmd:
         commands.append([vcgencmd, "display_power", value])
-
-    xset = shutil.which("xset")
-    if xset and os.environ.get("DISPLAY"):
-        commands.append([xset, "dpms", "force", state])
-
-    xrandr = shutil.which("xrandr")
-    if xrandr and os.environ.get("DISPLAY"):
-        output = _x11_output_name()
-        commands.append([xrandr, "--output", output, "--auto" if state == "on" else "--off"])
-
-    wlr_randr = shutil.which("wlr-randr")
-    if wlr_randr:
-        commands.append([wlr_randr, "--output", _wlr_output_name(), f"--{state}"])
-
-    wlopm = shutil.which("wlopm")
-    if wlopm:
-        commands.append([wlopm, f"--{state}", _wlr_output_name()])
-
-    swaymsg = shutil.which("swaymsg")
-    if swaymsg:
-        commands.append([swaymsg, "output", "*", "dpms", state])
 
     return commands
 
