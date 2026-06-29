@@ -137,15 +137,15 @@ Third pass added: redesigned full-game popup as a compact Game Center with match
   - Command Mode: current dense command-center layout.
   - Glance Mode: oversized live score, next event, and favorite-team state.
   - Nightstand Mode: clock, weather, next game, dim visuals, and reduced motion.
-- [ ] Rework dashboard flow toward Now / Next / Later:
+- [x] Rework dashboard flow toward Now / Next / Later:
   - Now: live games, urgent alerts, and live or near-start F1 sessions.
   - Next: games and sessions starting soon.
   - Later: calendar, upcoming slate, and planning context.
 - [x] Expand the RedZone-style alert rail globally for close games, favorite teams live, finals, F1 session starts, upset watch, red-zone trips, and turnovers.
 - [x] Add a one-tap Home/Back zone so touchscreen users never feel stuck inside nested views.
-- [ ] Add swipe hints that appear only the first few times, then stay out of the way.
+- [x] Add swipe hints that appear only the first few times, then stay out of the way.
 - [x] Tighten accessibility: `aria-current` for active navigation, better labels for icon-heavy controls, and visible keyboard focus states.
-- [ ] Improve empty states with useful next-best context, such as "No NFL games today. Next Cowboys game: Sunday 4:25 PM."
+- [x] Improve empty states with useful next-best context, such as "No NFL games today. Next Cowboys game: Sunday 4:25 PM."
 - [x] Add demo/mock data mode for off-season testing and development.
 
 ### P1 - Pi Health And Maintenance

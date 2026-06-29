@@ -401,6 +401,61 @@ input:focus-visible {
   align-content: start;
 }
 
+.dashboard-stage {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-stage-now {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.dashboard-stage-later {
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.dashboard-stage-label {
+  min-width: 0;
+  height: 21px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+}
+
+.dashboard-stage-label span {
+  height: 17px;
+  min-width: 34px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(88, 166, 255, 0.22);
+  border-radius: 5px;
+  background: rgba(88, 166, 255, 0.08);
+  color: #9fc8ff;
+  font-size: 9px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.dashboard-stage-label strong {
+  color: var(--text);
+  font-size: var(--fs-label);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.dashboard-stage-label em {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .right-column {
   grid-template-rows: auto auto;
   align-content: start;
@@ -566,6 +621,22 @@ input:focus-visible {
   user-select: none;
 }
 
+.swipe-hint {
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border: 1px solid rgba(88, 166, 255, 0.22);
+  border-radius: 5px;
+  background: rgba(88, 166, 255, 0.08);
+  color: #9fc8ff;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .section-title,
 .side-title {
   display: flex;
@@ -714,6 +785,14 @@ h2 {
   color: var(--muted);
   font-size: var(--fs-meta);
   font-weight: 800;
+}
+
+.ticker-title .swipe-hint,
+.side-title .swipe-hint,
+.calendar-heading .swipe-hint {
+  color: #9fc8ff;
+  font-size: 9px;
+  font-weight: 900;
 }
 
 .ticker-main {
@@ -2153,7 +2232,38 @@ h2 {
   }
 
   .primary-column {
-    grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .dashboard-stage {
+    gap: 3px;
+  }
+
+  .dashboard-stage-label {
+    height: 15px;
+    gap: 4px;
+  }
+
+  .dashboard-stage-label span {
+    height: 13px;
+    min-width: 27px;
+    border-radius: 4px;
+    font-size: 6px;
+  }
+
+  .dashboard-stage-label strong {
+    font-size: 9px;
+  }
+
+  .dashboard-stage-label em {
+    font-size: 7px;
+  }
+
+  .swipe-hint {
+    height: 13px;
+    padding: 0 4px;
+    border-radius: 4px;
+    font-size: 6px;
   }
 
   .dashboard-glance .live-score-ticker {
@@ -2499,6 +2609,17 @@ h2 {
   padding: 28px;
   color: var(--muted);
   font-size: var(--fs-body);
+  text-align: center;
+}
+
+.empty-tab strong {
+  color: var(--text);
+  font-size: var(--fs-label);
+}
+
+.empty-tab span {
+  max-width: 420px;
+  line-height: 1.35;
 }
 
 /* ── Modal ───────────────────────────────────────────────────── */

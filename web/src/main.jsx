@@ -96,6 +96,8 @@ const SLEEP_CONTROL_TAP_WINDOW_MS = 1400;
 const AUTO_UPDATE_CHECK_INTERVAL_MS = 5 * 60_000;
 const AUTO_UPDATE_RELOAD_DELAY_MS = 3500;
 const UPDATE_SKIP_KEY = "nash-update-skipped-revision";
+const SWIPE_HINT_KEY_PREFIX = "nash-swipe-hint-";
+const SWIPE_HINT_LIMIT = 3;
 const DEFAULT_NASH_SETTINGS = {
   screenMode: DEFAULT_SCREEN_MODE,
   headlineCycling: true,
@@ -350,6 +352,39 @@ function useSwipeControls({ onLeft, onRight, threshold = 45 }) {
       swipedRef.current = false;
     },
   };
+}
+
+function useLimitedSwipeHint(surface, limit = SWIPE_HINT_LIMIT) {
+  const storageKey = `${SWIPE_HINT_KEY_PREFIX}${surface}`;
+  const [visible, setVisible] = useState(() => {
+    try {
+      return Number(localStorage.getItem(storageKey) || 0) < limit;
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    const timer = window.setTimeout(() => {
+      try {
+        const count = Number(localStorage.getItem(storageKey) || 0) + 1;
+        localStorage.setItem(storageKey, String(count));
+        if (count >= limit) setVisible(false);
+      } catch {
+        setVisible(false);
+      }
+    }, 3200);
+    return () => window.clearTimeout(timer);
+  }, [limit, storageKey, visible]);
+
+  return visible;
+}
+
+function SwipeHint({ surface, label }) {
+  const visible = useLimitedSwipeHint(surface);
+  if (!visible) return null;
+  return <span className="swipe-hint">{label}</span>;
 }
 
 const WX_CODES = {
@@ -1476,6 +1511,29 @@ function gameDisplayName(game) {
   return `${game.away} @ ${game.home}`;
 }
 
+function nextGameSummary(game) {
+  if (!game) return "";
+  return `${gameDisplayName(game)} - ${formatGameTime(game.date)}`;
+}
+
+function gamesEmptyState(activeTab, { liveGames, recentGames, upcomingGames }) {
+  const next = upcomingGames?.[0];
+  const recent = recentGames?.[0];
+  if (activeTab === "live") {
+    return next
+      ? { title: "No live games right now", body: `Next up: ${nextGameSummary(next)}` }
+      : { title: "No live games right now", body: "Selected leagues are quiet. Demo Mode can fill the dashboard for testing." };
+  }
+  if (activeTab === "soon") {
+    return recent
+      ? { title: "No upcoming games in this feed", body: `Latest result: ${gameDisplayName(recent)} ${recent.status || ""}` }
+      : { title: "No upcoming games in selected leagues", body: "Turn on more leagues in Settings or use Demo Mode during off-season testing." };
+  }
+  return next
+    ? { title: "No recent finals in this feed", body: `Next game: ${nextGameSummary(next)}` }
+    : { title: "No recent games yet", body: "When finals arrive, they will land here automatically." };
+}
+
 function gameStatusBadge(game) {
   if (!game) return "SOON";
   if (game.leagueShort === "NFL" && game.isLive && game.situation?.isRedZone) return "RED ZONE";
@@ -1538,6 +1596,7 @@ function LiveScoreTicker({ games, title = "Live Scores", onSelectGame }) {
     >
       <div className="ticker-title">
         <h2>{title}</h2>
+        {items.length > 1 && <SwipeHint surface="ticker" label="Swipe scores" />}
         <span>{items.length > 1 ? `${(index % items.length) + 1}/${items.length}` : game.leagueShort}</span>
       </div>
       <div className="ticker-main">
@@ -5124,6 +5183,7 @@ function GamesSection({ liveGames, recentGames, upcomingGames, loading, onSelect
     upcomingGames;
 
   const games = showAll ? allGames : allGames.slice(0, GAMES_PAGE);
+  const emptyState = gamesEmptyState(activeTab, { liveGames, recentGames, upcomingGames });
   const hasMore = allGames.length > GAMES_PAGE;
   const isSoonTab = activeTab === "soon";
 
@@ -5145,6 +5205,7 @@ function GamesSection({ liveGames, recentGames, upcomingGames, loading, onSelect
     <section className="panel swipe-panel" {...swipeHandlers}>
       <div className="section-title">
         <TabBar active={activeTab} onChange={setActiveTab} counts={counts} />
+        <SwipeHint surface="game-tabs" label="Swipe tabs" />
         {hasMore && !loading && (
           <button className="link-button" onClick={() => setShowAll((v) => !v)}>
             {showAll ? "Show less" : `View all ${allGames.length}`} <Icon name="chevronRight" size={18} />
@@ -5159,7 +5220,8 @@ function GamesSection({ liveGames, recentGames, upcomingGames, loading, onSelect
       ) : games.length === 0 ? (
         <div className="empty-tab">
           <Icon name="radio" size={28} />
-          <span>No {activeTab === "recent" ? "recent" : activeTab === "live" ? "live" : "upcoming"} games right now</span>
+          <strong>{emptyState.title}</strong>
+          <span>{emptyState.body}</span>
         </div>
       ) : isSoonTab ? (
         <div className="soon-grid">
@@ -5973,6 +6035,7 @@ function CalendarPanel({ googleEvents = [], connected = false, sportsGames = [] 
         <div className="calendar-heading">
           <h2>Calendar</h2>
           <span className="cal-month">{rangeLabel}</span>
+          <SwipeHint surface="calendar" label="Swipe weeks" />
         </div>
         <button
           className="calendar-now-btn"
@@ -6145,6 +6208,7 @@ function HeadlinesRail({ articles, cycling = true }) {
     <section className="panel side-card headlines-rail swipe-panel" {...swipeHandlers}>
       <div className="side-title">
         <h2>Headlines</h2>
+        {items.length > 1 && <SwipeHint surface="headlines" label="Swipe news" />}
         <span>{items.length ? `${(index % items.length) + 1}/${items.length}` : "Standby"}</span>
       </div>
       {!active ? (
@@ -6425,6 +6489,16 @@ function DashboardAlertRail({ games, settings }) {
   );
 }
 
+function DashboardStageLabel({ label, title, meta }) {
+  return (
+    <div className="dashboard-stage-label">
+      <span>{label}</span>
+      <strong>{title}</strong>
+      {meta && <em>{meta}</em>}
+    </div>
+  );
+}
+
 function NightstandDashboard({ games, weather, settings }) {
   const now = useClock();
   const nextGame = prioritySortGames(games.filter((game) => game.state !== "post"), settings).find(Boolean);
@@ -6560,6 +6634,10 @@ function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh, se
   const normalizedSettings = normalizeNashSettings(settings);
   const dashboardGames = [...liveGames, ...upcomingGames, ...recentGames];
   const density = normalizedSettings.dashboardDensity;
+  const nextGame = upcomingGames[0];
+  const nowTitle = liveGames.length ? `${liveGames.length} Live` : "Live Standby";
+  const nextTitle = nextGame ? "Next 14 Days" : "Schedule Watch";
+  const laterTitle = recentGames.length ? "Slate And Results" : "Planning View";
 
   return (
     <>
@@ -6574,27 +6652,48 @@ function Dashboard({ onUpdated, googleEvents, googleConnected, onNextRefresh, se
             <NightstandDashboard games={dashboardGames} weather={weather} settings={normalizedSettings} />
           ) : (
             <>
-              <LiveScoreTicker
-                games={dashboardGames}
-                title="All Sports Live"
-                onSelectGame={setSelectedGame}
-              />
-              <DashboardAlertRail games={dashboardGames} settings={normalizedSettings} />
-              <CalendarPanel
-                googleEvents={googleEvents}
-                connected={googleConnected}
-                sportsGames={dashboardGames}
-              />
-              <GamesSection
-                liveGames={liveGames}
-                recentGames={recentGames}
-                upcomingGames={upcomingGames}
-                loading={loading}
-                onSelectGame={setSelectedGame}
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                lastUpdated={lastUpdated}
-              />
+              <div className="dashboard-stage dashboard-stage-now">
+                <DashboardStageLabel
+                  label="Now"
+                  title={nowTitle}
+                  meta={liveGames.length ? "Live scores and alerts" : "Monitoring selected leagues"}
+                />
+                <LiveScoreTicker
+                  games={dashboardGames}
+                  title="All Sports Live"
+                  onSelectGame={setSelectedGame}
+                />
+                <DashboardAlertRail games={dashboardGames} settings={normalizedSettings} />
+              </div>
+              <div className="dashboard-stage dashboard-stage-next">
+                <DashboardStageLabel
+                  label="Next"
+                  title={nextTitle}
+                  meta={nextGame ? nextGameSummary(nextGame) : "No upcoming games in selected leagues"}
+                />
+                <CalendarPanel
+                  googleEvents={googleEvents}
+                  connected={googleConnected}
+                  sportsGames={dashboardGames}
+                />
+              </div>
+              <div className="dashboard-stage dashboard-stage-later">
+                <DashboardStageLabel
+                  label="Later"
+                  title={laterTitle}
+                  meta={`${upcomingGames.length} upcoming - ${recentGames.length} recent`}
+                />
+                <GamesSection
+                  liveGames={liveGames}
+                  recentGames={recentGames}
+                  upcomingGames={upcomingGames}
+                  loading={loading}
+                  onSelectGame={setSelectedGame}
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                  lastUpdated={lastUpdated}
+                />
+              </div>
             </>
           )}
         </div>
