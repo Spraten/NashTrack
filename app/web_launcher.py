@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import secrets
 import shutil
 import stat
 import subprocess
@@ -21,6 +22,8 @@ HOST = os.environ.get("NASH_TRACK_HOST", "127.0.0.1")
 URL = f"http://127.0.0.1:{PORT}/"
 UPDATER_PORT = int(os.environ.get("NASH_TRACK_UPDATER_PORT", "5183"))
 UPDATER_URL = f"http://127.0.0.1:{UPDATER_PORT}/health"
+CONTROL_TOKEN_HEADER = "X-NashTrack-Control-Token"
+CONTROL_TOKEN = os.environ.get("NASH_TRACK_CONTROL_TOKEN") or secrets.token_urlsafe(32)
 PORTABLE_NODE_DIR = WEB_DIR / ".tools" / "node-v24.16.0-win-x64"
 WINDOW_WIDTH = int(os.environ.get("NASH_TRACK_WINDOW_WIDTH", "800"))
 WINDOW_HEIGHT = int(os.environ.get("NASH_TRACK_WINDOW_HEIGHT", "480"))
@@ -632,13 +635,24 @@ class _UpdaterHandler(BaseHTTPRequestHandler):
 
         return True
 
+    def _token_allowed(self, route: str) -> bool:
+        if route == "/health":
+            return True
+
+        supplied = self.headers.get(CONTROL_TOKEN_HEADER, "")
+        if secrets.compare_digest(supplied, CONTROL_TOKEN):
+            return True
+
+        self._send_json(401, {"ok": False, "message": "Missing or invalid local control token."})
+        return False
+
     def _send_cors_headers(self) -> None:
         origin = self._origin()
         if origin and origin in _allowed_app_origins():
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Headers", f"Content-Type, {CONTROL_TOKEN_HEADER}")
             self.send_header("Access-Control-Max-Age", "600")
 
     def _send_json(self, status: int, payload: dict[str, object]) -> None:
@@ -675,6 +689,9 @@ class _UpdaterHandler(BaseHTTPRequestHandler):
             return
 
         route = self.path.split("?", 1)[0]
+        if not self._token_allowed(route):
+            return
+
         if route == "/health":
             self._send_json(200, {"ok": True, "service": "Nash Track updater"})
             return
@@ -695,6 +712,9 @@ class _UpdaterHandler(BaseHTTPRequestHandler):
             return
 
         route = self.path.split("?", 1)[0]
+        if not self._token_allowed(route):
+            return
+
         try:
             if route == "/update":
                 result = _run_git_update()
@@ -769,6 +789,8 @@ def _start_vite() -> subprocess.Popen[bytes]:
 
     node = _node_executable()
     env = os.environ.copy()
+    env["VITE_NASH_TRACK_CONTROL_TOKEN"] = CONTROL_TOKEN
+    env["VITE_NASH_TRACK_SERVICE_URL"] = f"http://127.0.0.1:{UPDATER_PORT}"
     if PORTABLE_NODE_DIR.exists():
         env["PATH"] = f"{PORTABLE_NODE_DIR}{os.pathsep}{env.get('PATH', '')}"
 

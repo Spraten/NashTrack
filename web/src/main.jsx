@@ -86,7 +86,8 @@ function Icon({ name, size = 20, filled = false }) {
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
 const NASH_SETTINGS_KEY = "nash-settings";
-const DISPLAY_SERVICE_URL = "http://127.0.0.1:5183";
+const DISPLAY_SERVICE_URL = import.meta.env.VITE_NASH_TRACK_SERVICE_URL || "http://127.0.0.1:5183";
+const DISPLAY_SERVICE_TOKEN = import.meta.env.VITE_NASH_TRACK_CONTROL_TOKEN || "";
 const DEFAULT_SCREEN_MODE = "alwaysOn";
 const SCREEN_SLEEP_MODE = "sleep3";
 const SCREEN_SLEEP_MS = 3 * 60_000;
@@ -105,8 +106,16 @@ function loadNashSettings() {
   }
 }
 
+function localServiceHeaders(extra = {}) {
+  return DISPLAY_SERVICE_TOKEN
+    ? { ...extra, "X-NashTrack-Control-Token": DISPLAY_SERVICE_TOKEN }
+    : extra;
+}
+
 async function getLocalService(path) {
-  const response = await fetch(`${DISPLAY_SERVICE_URL}${path}`);
+  const response = await fetch(`${DISPLAY_SERVICE_URL}${path}`, {
+    headers: localServiceHeaders(),
+  });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.ok === false) {
     throw new Error(data.message || `Local service failed with HTTP ${response.status}`);
@@ -117,7 +126,7 @@ async function getLocalService(path) {
 async function postDisplayService(path, payload) {
   const response = await fetch(`${DISPLAY_SERVICE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: localServiceHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
   const data = await response.json().catch(() => ({}));
@@ -132,7 +141,10 @@ async function checkForAppUpdate() {
 }
 
 async function runAppUpdate() {
-  const response = await fetch(`${DISPLAY_SERVICE_URL}/update`, { method: "POST" });
+  const response = await fetch(`${DISPLAY_SERVICE_URL}/update`, {
+    method: "POST",
+    headers: localServiceHeaders(),
+  });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.ok === false) {
     throw new Error(data.message || `Update failed with HTTP ${response.status}`);
