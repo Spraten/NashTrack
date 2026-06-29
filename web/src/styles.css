@@ -294,6 +294,66 @@ button {
   font-size: var(--fs-meta);
 }
 
+.sleep-control-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sleep-control {
+  height: 34px;
+  min-width: 76px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.sleep-control.enabled {
+  border-color: rgba(125, 178, 255, 0.42);
+  background: rgba(77, 135, 255, 0.16);
+  color: #9fc8ff;
+}
+
+.sleep-control.awake {
+  border-color: rgba(255, 211, 94, 0.32);
+  color: #ffd35e;
+}
+
+.sleep-control.busy {
+  opacity: 0.7;
+}
+
+.sleep-control-hint {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 20;
+  width: 270px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  background: rgba(8, 12, 20, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.26);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.25;
+  padding: 6px 8px;
+  pointer-events: none;
+  text-align: right;
+}
+
 .dashboard {
   min-height: 0;
   flex: 1;
@@ -1421,6 +1481,29 @@ h2 {
 
   .weather-pill span {
     display: none;
+  }
+
+  .sleep-control {
+    height: 28px;
+    min-width: 64px;
+    border-radius: 6px;
+    gap: 4px;
+    padding: 0 6px;
+    font-size: 9px;
+  }
+
+  .sleep-control .icon {
+    width: 13px;
+    height: 13px;
+  }
+
+  .sleep-control-hint {
+    top: calc(100% + 3px);
+    width: 212px;
+    border-radius: 6px;
+    font-size: 8px;
+    line-height: 1.2;
+    padding: 4px 6px;
   }
 
   .system-strip > .icon {
@@ -3851,6 +3934,10 @@ h2 {
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.2);
   gap: 3px;
+}
+
+.settings-update-mode-toggle {
+  width: 142px;
 }
 
 .settings-mode-btn {

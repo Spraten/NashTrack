@@ -53,6 +53,7 @@ const iconPaths = {
   cloudSun: (<><path d="M12 3v2" /><path d="m5.6 5.6 1.4 1.4" /><path d="M3 12h2" /><path d="m18.4 5.6-1.4 1.4" /><path d="M17 12a5 5 0 0 0-9.7-1.7A4.5 4.5 0 1 0 7.5 19H17a3.5 3.5 0 0 0 0-7Z" /></>),
   cloud: (<><path d="M17 12a5 5 0 0 0-9.7-1.7A4.5 4.5 0 1 0 7.5 19H17a3.5 3.5 0 0 0 0-7Z" /></>),
   sun: (<><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></>),
+  moon: <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.5 6.5 0 0 0 21 12.8Z" />,
   cloudRain: (<><path d="M17 12a5 5 0 0 0-9.7-1.7A4.5 4.5 0 1 0 7.5 19H17a3.5 3.5 0 0 0 0-7Z" /><path d="M10 19v2" /><path d="M14 19v2" /></>),
   cloudSnow: (<><path d="M17 12a5 5 0 0 0-9.7-1.7A4.5 4.5 0 1 0 7.5 19H17a3.5 3.5 0 0 0 0-7Z" /><path d="M10 19v2" /><circle cx="10" cy="22" r="1" /><path d="M14 19v2" /><circle cx="14" cy="22" r="1" /></>),
   zap: <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />,
@@ -89,15 +90,18 @@ const DISPLAY_SERVICE_URL = "http://127.0.0.1:5183";
 const DEFAULT_SCREEN_MODE = "alwaysOn";
 const SCREEN_SLEEP_MODE = "sleep3";
 const SCREEN_SLEEP_MS = 3 * 60_000;
-const UPDATE_CHECK_INTERVAL_MS = 60 * 60_000;
+const SLEEP_CONTROL_HOLD_MS = 850;
+const SLEEP_CONTROL_TAP_WINDOW_MS = 1400;
+const AUTO_UPDATE_CHECK_INTERVAL_MS = 5 * 60_000;
+const AUTO_UPDATE_RELOAD_DELAY_MS = 3500;
 const UPDATE_SKIP_KEY = "nash-update-skipped-revision";
 
 function loadNashSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(NASH_SETTINGS_KEY) || "{}");
-    return { screenMode: DEFAULT_SCREEN_MODE, headlineCycling: true, ...saved };
+    return { screenMode: DEFAULT_SCREEN_MODE, headlineCycling: true, autoUpdates: false, ...saved };
   } catch {
-    return { screenMode: DEFAULT_SCREEN_MODE, headlineCycling: true };
+    return { screenMode: DEFAULT_SCREEN_MODE, headlineCycling: true, autoUpdates: false };
   }
 }
 
@@ -4667,6 +4671,7 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
   const connected = !!settings.googleToken;
   const screenMode = settings.screenMode === SCREEN_SLEEP_MODE ? SCREEN_SLEEP_MODE : DEFAULT_SCREEN_MODE;
   const headlineCycling = settings.headlineCycling !== false;
+  const autoUpdates = settings.autoUpdates === true;
 
   useEffect(() => {
     function onKey(e) { if (e.key === "Escape") onClose(); }
@@ -4737,11 +4742,13 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
     try {
       const response = await fetch("http://127.0.0.1:5183/update", { method: "POST" });
       const payload = await response.json().catch(() => ({}));
+      const changed = payload.ok && !/Already up to date/i.test(`${payload.message || ""}\n${payload.output || ""}`);
       setUpdateStatus({
         state: payload.ok ? "success" : "error",
-        message: payload.message || (response.ok ? "Update complete." : "Update failed."),
+        message: changed ? "Update installed. Reloading NashTrack..." : payload.message || (response.ok ? "Update complete." : "Update failed."),
         output: payload.output || "",
       });
+      if (changed) window.setTimeout(() => window.location.reload(), AUTO_UPDATE_RELOAD_DELAY_MS);
     } catch (error) {
       setUpdateStatus({
         state: "error",
@@ -4804,6 +4811,17 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
 
   function handleHeadlineCycling(enabled) {
     onSave({ ...settings, headlineCycling: enabled });
+  }
+
+  function handleAutoUpdates(enabled) {
+    onSave({ ...settings, autoUpdates: enabled });
+    setUpdateStatus({
+      state: enabled ? "success" : "idle",
+      message: enabled
+        ? "Auto updates enabled. The Pi will check main every 5 minutes."
+        : "Auto updates off. Use Pull Update for manual updates.",
+      output: "",
+    });
   }
 
   async function handleDisplaySleepTest() {
@@ -4898,9 +4916,23 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
             <span className="settings-service-icon">GH</span>
             <div className="settings-service-info">
               <strong>Nash Track GitHub</strong>
-              <span className={updateStatus.state === "success" ? "connected-text" : "muted-text"}>
-                Pull latest code from the configured origin remote
+              <span className={autoUpdates ? "connected-text" : "muted-text"}>
+                {autoUpdates ? "Auto-pulls main every 5 minutes" : "Manual updates only"}
               </span>
+            </div>
+            <div className="settings-mode-toggle settings-update-mode-toggle" role="group" aria-label="Auto updates">
+              <button
+                className={`settings-mode-btn ${autoUpdates ? "active" : ""}`}
+                onClick={() => handleAutoUpdates(true)}
+              >
+                Auto
+              </button>
+              <button
+                className={`settings-mode-btn ${!autoUpdates ? "active" : ""}`}
+                onClick={() => handleAutoUpdates(false)}
+              >
+                Manual
+              </button>
             </div>
             <button
               className="settings-update-btn"
@@ -5143,7 +5175,102 @@ function Sidebar({ lastUpdated, nextRefresh, onOpenSettings, activeView, onNavig
 
 // ─── Header ──────────────────────────────────────────────────────────────────
 
-function Header({ weather }) {
+function SleepControl({ screenMode, onSetScreenMode, onSleepNow }) {
+  const [hint, setHint] = useState("");
+  const [busy, setBusy] = useState(false);
+  const holdTimerRef = useRef(null);
+  const hintTimerRef = useRef(null);
+  const heldRef = useRef(false);
+  const tapTimesRef = useRef([]);
+  const sleepEnabled = screenMode === SCREEN_SLEEP_MODE;
+
+  function clearHoldTimer() {
+    if (holdTimerRef.current) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  }
+
+  function showHint(message) {
+    setHint(message);
+    if (hintTimerRef.current) window.clearTimeout(hintTimerRef.current);
+    hintTimerRef.current = window.setTimeout(() => setHint(""), 3600);
+  }
+
+  function handlePointerDown(event) {
+    if (busy) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    heldRef.current = false;
+    clearHoldTimer();
+    holdTimerRef.current = window.setTimeout(async () => {
+      heldRef.current = true;
+      setBusy(true);
+      const nextMode = sleepEnabled ? DEFAULT_SCREEN_MODE : SCREEN_SLEEP_MODE;
+      try {
+        await onSetScreenMode(nextMode);
+        tapTimesRef.current = [];
+        showHint(nextMode === SCREEN_SLEEP_MODE ? "Sleep mode enabled" : "Always-on mode enabled");
+      } catch {
+        showHint("Sleep controls are unavailable");
+      } finally {
+        setBusy(false);
+      }
+    }, SLEEP_CONTROL_HOLD_MS);
+  }
+
+  async function handlePointerUp() {
+    clearHoldTimer();
+    if (heldRef.current || busy) return;
+
+    const now = Date.now();
+    const taps = tapTimesRef.current.filter((tapAt) => now - tapAt < SLEEP_CONTROL_TAP_WINDOW_MS);
+    taps.push(now);
+    tapTimesRef.current = taps;
+
+    if (taps.length >= 3) {
+      tapTimesRef.current = [];
+      setBusy(true);
+      try {
+        await onSleepNow();
+        showHint("Sleeping now");
+      } catch {
+        showHint("Sleep now is unavailable");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    showHint(taps.length === 1
+      ? "Press and hold to toggle sleep or tap 2 more times to sleep now"
+      : "Tap 1 more time to sleep now");
+  }
+
+  useEffect(() => () => {
+    clearHoldTimer();
+    if (hintTimerRef.current) window.clearTimeout(hintTimerRef.current);
+  }, []);
+
+  return (
+    <div className="sleep-control-wrap">
+      <button
+        aria-label="Screen sleep control"
+        className={`sleep-control ${sleepEnabled ? "enabled" : "awake"} ${busy ? "busy" : ""}`}
+        onPointerCancel={clearHoldTimer}
+        onPointerDown={handlePointerDown}
+        onPointerLeave={clearHoldTimer}
+        onPointerUp={handlePointerUp}
+        type="button"
+      >
+        <Icon name={sleepEnabled ? "moon" : "sun"} size={15} />
+        <span>{sleepEnabled ? "Sleep" : "Awake"}</span>
+      </button>
+      {hint && <span className="sleep-control-hint">{hint}</span>}
+    </div>
+  );
+}
+
+function Header({ weather, screenMode, onSetScreenMode, onSleepNow }) {
   const now = useClock();
   const timeStr = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   const tzStr = now.toLocaleTimeString("en-US", { timeZoneName: "short" }).split(" ").pop();
@@ -5172,6 +5299,11 @@ function Header({ weather }) {
             </div>
           </div>
         )}
+        <SleepControl
+          screenMode={screenMode}
+          onSetScreenMode={onSetScreenMode}
+          onSleepNow={onSleepNow}
+        />
         <Icon name="wifi" size={24} />
       </div>
     </header>
@@ -5789,6 +5921,7 @@ function App() {
   const [googleToken,  setGoogleToken]  = useState(() => sessionStorage.getItem("gtoken") || null);
   const [calEvents,    setCalEvents]    = useState([]);
   const [updatePrompt, setUpdatePrompt] = useState({ visible: false, state: "idle", message: "", output: "", update: null });
+  const autoUpdateInFlightRef = useRef(false);
 
   useEffect(() => {
     function syncViewFromHash() {
@@ -5857,15 +5990,45 @@ function App() {
   }
 
   async function checkForUpdatePrompt() {
+    if (settings.autoUpdates !== true || autoUpdateInFlightRef.current) return;
+
     try {
       const payload = await checkForAppUpdate();
-      const skippedRevision = loadSkippedUpdateRevision();
-      if (payload.updateAvailable && payload.remoteRevision && payload.remoteRevision !== skippedRevision) {
+      if (!payload.updateAvailable || !payload.remoteRevision) return;
+
+      autoUpdateInFlightRef.current = true;
+      setUpdatePrompt({
+        visible: true,
+        state: "running",
+        message: payload.behind > 1 ? `Auto updating ${payload.behind} NashTrack commits...` : "Auto updating NashTrack...",
+        output: payload.remoteShort
+          ? `${payload.remoteShort}${payload.subject ? ` - ${payload.subject}` : ""}`
+          : "",
+        update: payload,
+      });
+
+      try {
+        const result = await runAppUpdate();
+        const changed = !/Already up to date/i.test(`${result.message || ""}\n${result.output || ""}`);
         setUpdatePrompt({
           visible: true,
-          state: "ready",
-          message: payload.behind > 1 ? `${payload.behind} NashTrack updates available` : "NashTrack update available",
-          output: "",
+          state: "success",
+          message: changed ? "Update installed. Reloading NashTrack..." : result.message || "NashTrack is up to date.",
+          output: result.output || "",
+          update: payload,
+        });
+        if (changed) {
+          window.setTimeout(() => window.location.reload(), AUTO_UPDATE_RELOAD_DELAY_MS);
+        } else {
+          autoUpdateInFlightRef.current = false;
+        }
+      } catch (error) {
+        autoUpdateInFlightRef.current = false;
+        setUpdatePrompt({
+          visible: true,
+          state: "error",
+          message: "Auto update failed. Manual update is still available in Settings.",
+          output: String(error.message || error),
           update: payload,
         });
       }
@@ -5914,6 +6077,21 @@ function App() {
     setUpdatePrompt((prev) => ({ ...prev, visible: false }));
   }
 
+  async function setScreenModeFromTopbar(mode) {
+    const next = { ...settings, screenMode: mode };
+    saveSettings(next);
+    await postDisplayService("/display", { mode });
+  }
+
+  async function sleepNowFromTopbar() {
+    if (settings.screenMode !== SCREEN_SLEEP_MODE) {
+      const next = { ...settings, screenMode: SCREEN_SLEEP_MODE };
+      saveSettings(next);
+      await postDisplayService("/display", { mode: SCREEN_SLEEP_MODE });
+    }
+    await postDisplayService("/display/power", { state: "off" });
+  }
+
   function navigateView(view) {
     setActiveView(view);
     const url = view === "dashboard"
@@ -5929,13 +6107,18 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (settings.autoUpdates !== true) {
+      autoUpdateInFlightRef.current = false;
+      return undefined;
+    }
+
     const firstCheck = window.setTimeout(checkForUpdatePrompt, 12_000);
-    const interval = window.setInterval(checkForUpdatePrompt, UPDATE_CHECK_INTERVAL_MS);
+    const interval = window.setInterval(checkForUpdatePrompt, AUTO_UPDATE_CHECK_INTERVAL_MS);
     return () => {
       window.clearTimeout(firstCheck);
       window.clearInterval(interval);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [settings.autoUpdates]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useScreenSleepMode(settings.screenMode || DEFAULT_SCREEN_MODE);
 
@@ -5966,7 +6149,12 @@ function App() {
         onNavigate={navigateView}
       />
       <div className="content-shell">
-        <Header weather={weather} />
+        <Header
+          weather={weather}
+          screenMode={settings.screenMode || DEFAULT_SCREEN_MODE}
+          onSetScreenMode={setScreenModeFromTopbar}
+          onSleepNow={sleepNowFromTopbar}
+        />
         {activeView === "f1" ? (
           <F1ErrorBoundary>
             <F1CommandView onUpdated={setLastUpdated} onNextRefresh={setNextRefresh} />
