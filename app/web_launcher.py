@@ -32,9 +32,14 @@ DISPLAY_STATE_FILE = Path(
 )
 DISPLAY_MODES = {"alwaysOn", "sleep3"}
 DISPLAY_POWER_STATES = {"on", "off"}
+DISPLAY_SLEEP_SECONDS = int(os.environ.get("NASH_TRACK_SCREEN_SLEEP_SECONDS", "180"))
 AUTOSTART_FILE = Path.home() / ".config" / "autostart" / "nashtrack.desktop"
 _updater_server: ThreadingHTTPServer | None = None
 _updater_thread: threading.Thread | None = None
+_display_lock = threading.Lock()
+_display_last_activity = time.monotonic()
+_display_sleeping = False
+_display_watchdog_thread: threading.Thread | None = None
 
 
 def _creation_flags() -> int:
@@ -134,6 +139,122 @@ def _run_git_update() -> dict[str, object]:
     }
 
 
+def _run_git_update_check() -> dict[str, object]:
+    git = shutil.which("git")
+    if not git:
+        return {"ok": False, "message": "Git was not found on PATH."}
+
+    inside = subprocess.run(
+        [git, "rev-parse", "--is-inside-work-tree"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    if inside.returncode != 0 or inside.stdout.strip() != "true":
+        return {"ok": False, "message": "Nash Track is not inside a Git worktree."}
+
+    remote = subprocess.run(
+        [git, "remote", "get-url", "origin"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    if remote.returncode != 0:
+        return {"ok": False, "message": "No origin remote is configured yet."}
+
+    branch = subprocess.run(
+        [git, "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    branch_name = branch.stdout.strip() if branch.returncode == 0 else "main"
+
+    fetch = subprocess.run(
+        [git, "fetch", "--quiet", "origin"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        timeout=120,
+    )
+    if fetch.returncode != 0:
+        output = "\n".join(part.strip() for part in (fetch.stdout, fetch.stderr) if part.strip())
+        return {"ok": False, "message": "Could not check GitHub for updates.", "output": output}
+
+    upstream = subprocess.run(
+        [git, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    upstream_ref = upstream.stdout.strip() if upstream.returncode == 0 else f"origin/{branch_name}"
+
+    local = subprocess.run(
+        [git, "rev-parse", "HEAD"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    remote_head = subprocess.run(
+        [git, "rev-parse", upstream_ref],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    if local.returncode != 0 or remote_head.returncode != 0:
+        return {"ok": False, "message": f"Could not resolve update target {upstream_ref}."}
+
+    local_revision = local.stdout.strip()
+    remote_revision = remote_head.stdout.strip()
+
+    behind = subprocess.run(
+        [git, "rev-list", "--count", f"{local_revision}..{remote_revision}"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    ahead = subprocess.run(
+        [git, "rev-list", "--count", f"{remote_revision}..{local_revision}"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    subject = subprocess.run(
+        [git, "log", "-1", "--pretty=%s", remote_revision],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+
+    behind_count = int((behind.stdout or "0").strip() or "0") if behind.returncode == 0 else 0
+    ahead_count = int((ahead.stdout or "0").strip() or "0") if ahead.returncode == 0 else 0
+    update_available = behind_count > 0 and local_revision != remote_revision
+
+    return {
+        "ok": True,
+        "updateAvailable": update_available,
+        "message": "Update available." if update_available else "Nash Track is up to date.",
+        "branch": branch_name,
+        "upstream": upstream_ref,
+        "behind": behind_count,
+        "ahead": ahead_count,
+        "localRevision": local_revision,
+        "remoteRevision": remote_revision,
+        "remoteShort": remote_revision[:7],
+        "subject": subject.stdout.strip() if subject.returncode == 0 else "",
+        "checkedAt": time.time(),
+    }
+
+
 def _run_display_command(command: list[str], timeout: float = 5.0) -> dict[str, object]:
     try:
         result = subprocess.run(
@@ -170,6 +291,21 @@ def _wlr_output_name() -> str:
     return "DSI-1"
 
 
+def _x11_output_name() -> str:
+    explicit = os.environ.get("NASH_TRACK_DISPLAY_OUTPUT", "").strip()
+    if explicit:
+        return explicit
+
+    xrandr = shutil.which("xrandr")
+    if xrandr and os.environ.get("DISPLAY"):
+        result = _run_display_command([xrandr, "--query"], timeout=3.0)
+        for line in str(result.get("output", "")).splitlines():
+            if " connected" in line:
+                return line.split()[0]
+
+    return "DSI-1"
+
+
 def _display_power_commands(state: str) -> list[list[str]]:
     value = "1" if state == "on" else "0"
     commands: list[list[str]] = []
@@ -181,6 +317,11 @@ def _display_power_commands(state: str) -> list[list[str]]:
     xset = shutil.which("xset")
     if xset and os.environ.get("DISPLAY"):
         commands.append([xset, "dpms", "force", state])
+
+    xrandr = shutil.which("xrandr")
+    if xrandr and os.environ.get("DISPLAY"):
+        output = _x11_output_name()
+        commands.append([xrandr, "--output", output, "--auto" if state == "on" else "--off"])
 
     wlr_randr = shutil.which("wlr-randr")
     if wlr_randr:
@@ -197,7 +338,29 @@ def _display_power_commands(state: str) -> list[list[str]]:
     return commands
 
 
+def _display_idle_config_commands(mode: str) -> list[list[str]]:
+    commands: list[list[str]] = []
+    xset = shutil.which("xset")
+    if xset and os.environ.get("DISPLAY"):
+        if mode == "alwaysOn":
+            commands.extend([[xset, "s", "off"], [xset, "s", "noblank"], [xset, "-dpms"]])
+        elif mode == "sleep3":
+            seconds = str(DISPLAY_SLEEP_SECONDS)
+            commands.extend([[xset, "s", seconds, seconds], [xset, "+dpms"], [xset, "dpms", seconds, seconds, seconds]])
+    return commands
+
+
+def _configure_display_idle(mode: str) -> dict[str, object]:
+    attempts = [_run_display_command(command, timeout=3.0) for command in _display_idle_config_commands(mode)]
+    return {
+        "ok": any(result.get("ok") for result in attempts) if attempts else False,
+        "attempts": attempts,
+    }
+
+
 def _set_display_power(state: str) -> dict[str, object]:
+    global _display_sleeping
+
     if state not in DISPLAY_POWER_STATES:
         return {"ok": False, "message": f"Unknown display power state: {state}"}
 
@@ -206,6 +369,8 @@ def _set_display_power(state: str) -> dict[str, object]:
         result = _run_display_command(command)
         attempts.append(result)
         if result.get("ok"):
+            with _display_lock:
+                _display_sleeping = state == "off"
             return {
                 "ok": True,
                 "message": f"Display power {state} command sent.",
@@ -217,6 +382,87 @@ def _set_display_power(state: str) -> dict[str, object]:
         "ok": False,
         "message": "No supported display power command worked on this system.",
         "attempts": attempts,
+    }
+
+
+def _note_display_activity(wake: bool = True) -> dict[str, object]:
+    global _display_last_activity
+
+    with _display_lock:
+        _display_last_activity = time.monotonic()
+        should_wake = wake and _display_sleeping
+
+    if should_wake:
+        return _set_display_power("on")
+    return {"ok": True, "message": "Display activity recorded."}
+
+
+def _display_status() -> dict[str, object]:
+    now = time.monotonic()
+    with _display_lock:
+        idle_for = max(0.0, now - _display_last_activity)
+        sleeping = _display_sleeping
+
+    mode = _read_display_mode()
+    return {
+        "ok": True,
+        "mode": mode,
+        "sleeping": sleeping,
+        "idleSeconds": int(idle_for),
+        "timeoutSeconds": DISPLAY_SLEEP_SECONDS,
+        "secondsUntilSleep": max(0, DISPLAY_SLEEP_SECONDS - int(idle_for)) if mode == "sleep3" else None,
+        "powerCommands": [command[0] for command in _display_power_commands("off")],
+    }
+
+
+def _display_watchdog_loop() -> None:
+    while True:
+        time.sleep(5)
+        mode = _read_display_mode()
+        if mode != "sleep3":
+            with _display_lock:
+                sleeping = _display_sleeping
+            if sleeping:
+                _set_display_power("on")
+            continue
+
+        with _display_lock:
+            idle_for = time.monotonic() - _display_last_activity
+            sleeping = _display_sleeping
+
+        if not sleeping and idle_for >= DISPLAY_SLEEP_SECONDS:
+            _set_display_power("off")
+
+
+def _start_display_watchdog() -> None:
+    global _display_watchdog_thread
+    if _display_watchdog_thread:
+        return
+
+    _note_display_activity(wake=False)
+    _display_watchdog_thread = threading.Thread(
+        target=_display_watchdog_loop,
+        name="NashTrackDisplayWatchdog",
+        daemon=True,
+    )
+    _display_watchdog_thread.start()
+
+
+def _test_display_sleep() -> dict[str, object]:
+    result = _set_display_power("off")
+    if not result.get("ok"):
+        return result
+
+    def wake_later() -> None:
+        time.sleep(10)
+        _note_display_activity(wake=True)
+
+    threading.Thread(target=wake_later, name="NashTrackDisplayWakeTest", daemon=True).start()
+    return {
+        "ok": True,
+        "message": "Display sleep test started. The screen should wake automatically in 10 seconds.",
+        "command": result.get("command"),
+        "output": result.get("output", ""),
     }
 
 
@@ -241,6 +487,12 @@ def _save_display_mode(mode: str) -> dict[str, object]:
 
     if mode == "sleep3" and not _display_power_commands("off"):
         response["warning"] = "Screen sleep was saved, but no display power command was found on this system."
+
+    idle_config = _configure_display_idle(mode)
+    if idle_config.get("attempts"):
+        response["idleConfigured"] = bool(idle_config.get("ok"))
+
+    _note_display_activity(wake=True)
 
     if mode == "alwaysOn":
         power = _set_display_power("on")
@@ -358,10 +610,14 @@ class _UpdaterHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "service": "Nash Track updater"})
             return
         if route == "/display":
-            self._send_json(200, {"ok": True, "mode": _read_display_mode()})
+            self._send_json(200, _display_status())
             return
         if route == "/startup":
             self._send_json(200, _autostart_status())
+            return
+        if route == "/update/check":
+            result = _run_git_update_check()
+            self._send_json(200 if result.get("ok") else 409, result)
             return
         self._send_json(404, {"ok": False, "message": "Unknown updater route."})
 
@@ -385,6 +641,18 @@ class _UpdaterHandler(BaseHTTPRequestHandler):
                 self._send_json(200 if result.get("ok") else 501, result)
                 return
 
+            if route == "/display/activity":
+                self._read_json_body()
+                result = _note_display_activity(wake=True)
+                self._send_json(200 if result.get("ok") else 501, {**_display_status(), **result})
+                return
+
+            if route == "/display/test-sleep":
+                self._read_json_body()
+                result = _test_display_sleep()
+                self._send_json(200 if result.get("ok") else 501, result)
+                return
+
             if route == "/startup":
                 payload = self._read_json_body()
                 result = _set_autostart(bool(payload.get("enabled")))
@@ -398,6 +666,7 @@ class _UpdaterHandler(BaseHTTPRequestHandler):
 
 def _start_updater_server() -> None:
     global _updater_server, _updater_thread
+    _start_display_watchdog()
     if _updater_is_ready():
         return
     if _updater_server:

@@ -89,6 +89,8 @@ const DISPLAY_SERVICE_URL = "http://127.0.0.1:5183";
 const DEFAULT_SCREEN_MODE = "alwaysOn";
 const SCREEN_SLEEP_MODE = "sleep3";
 const SCREEN_SLEEP_MS = 3 * 60_000;
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60_000;
+const UPDATE_SKIP_KEY = "nash-update-skipped-revision";
 
 function loadNashSettings() {
   try {
@@ -121,9 +123,39 @@ async function postDisplayService(path, payload) {
   return data;
 }
 
+async function checkForAppUpdate() {
+  return getLocalService("/update/check");
+}
+
+async function runAppUpdate() {
+  const response = await fetch(`${DISPLAY_SERVICE_URL}/update`, { method: "POST" });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.message || `Update failed with HTTP ${response.status}`);
+  }
+  return data;
+}
+
+function loadSkippedUpdateRevision() {
+  try {
+    return localStorage.getItem(UPDATE_SKIP_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveSkippedUpdateRevision(revision) {
+  try {
+    if (revision) localStorage.setItem(UPDATE_SKIP_KEY, revision);
+  } catch {
+    // Ignore storage failures in kiosk mode.
+  }
+}
+
 function useScreenSleepMode(screenMode) {
   const timerRef = useRef(null);
   const sleepingRef = useRef(false);
+  const lastActivityPostRef = useRef(0);
 
   useEffect(() => {
     const clearSleepTimer = () => {
@@ -135,6 +167,13 @@ function useScreenSleepMode(screenMode) {
 
     const power = (state) => {
       postDisplayService("/display/power", { state }).catch(() => {});
+    };
+
+    const noteActivity = () => {
+      const now = Date.now();
+      if (now - lastActivityPostRef.current < 1000) return;
+      lastActivityPostRef.current = now;
+      postDisplayService("/display/activity", { source: "browser" }).catch(() => {});
     };
 
     if (screenMode !== SCREEN_SLEEP_MODE) {
@@ -155,6 +194,7 @@ function useScreenSleepMode(screenMode) {
     };
 
     const wakeAndReset = () => {
+      noteActivity();
       if (sleepingRef.current) {
         sleepingRef.current = false;
         power("on");
@@ -162,8 +202,9 @@ function useScreenSleepMode(screenMode) {
       armSleepTimer();
     };
 
-    const events = ["pointerdown", "keydown", "touchstart", "wheel"];
+    const events = ["pointerdown", "pointermove", "keydown", "touchstart", "wheel"];
     events.forEach((eventName) => window.addEventListener(eventName, wakeAndReset, { passive: true }));
+    noteActivity();
     armSleepTimer();
 
     return () => {
@@ -315,7 +356,11 @@ const BROADCAST_PATTERNS = [
   { re: /\bcbs\b/i, label: "CBS", iconKey: "cbs" },
   { re: /\bnbc\b/i, label: "NBC", iconKey: "nbc" },
   { re: /\btnt\b/i, label: "TNT", iconKey: "tnt" },
+  { re: /\btbs\b/i, label: "TBS", iconKey: "tbs" },
+  { re: /\busa\b|usa network/i, label: "USA", iconKey: "usa" },
   { re: /nfl network|nfln/i, label: "NFLN", iconKey: "nfln" },
+  { re: /nba tv/i, label: "NBA TV", iconKey: "nbatv" },
+  { re: /mlb network/i, label: "MLBN", iconKey: "mlbn" },
   { re: /prime|amazon/i, label: "Prime", iconKey: "prime" },
   { re: /peacock/i, label: "Peacock", iconKey: "peacock" },
   { re: /apple/i, label: "Apple TV", iconKey: "apple" },
@@ -326,10 +371,7 @@ function normalizeBroadcastLabel(value) {
   if (!raw) return null;
   const matched = BROADCAST_PATTERNS.find((item) => item.re.test(raw));
   if (matched) return matched;
-  return {
-    label: raw.replace(/\s+Network$/i, "").slice(0, 12),
-    iconKey: "tv",
-  };
+  return null;
 }
 
 function collectBroadcastLabels(source, out = []) {
@@ -637,7 +679,7 @@ async function fetchGameDetail(sport, league, eventId) {
     return {
       venue: str(venue.fullName),
       city: [addr.city, addr.state].filter(Boolean).map(str).join(", "),
-      broadcast: broadcasts[0]?.label || str(comp.broadcasts?.[0]?.media?.shortName) || str(comp.broadcasts?.[0]?.names?.[0]),
+      broadcast: broadcasts[0]?.label || "",
       broadcasts,
       spread,
       overUnder,
@@ -944,8 +986,8 @@ function parseESPNEvent(event, leagueShort, tone, sport, league) {
 async function fetchGoogleCalendarEvents(token) {
   try {
     const now = new Date();
-    const timeMin = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const timeMax = new Date(now.getFullYear(), now.getMonth() + 2, 0).toISOString();
+    const timeMin = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+    const timeMax = new Date(now.getFullYear(), now.getMonth() + 3, 0).toISOString();
     const res = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
       `timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}` +
@@ -1028,6 +1070,49 @@ function formatGameTime(dateStr) {
 }
 
 // ─── Static nav / favorites data ─────────────────────────────────────────────
+
+function toLocalDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return new Date(value);
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function localDateKey(value) {
+  const date = toLocalDate(value);
+  if (!date) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(date, days) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function startOfWeek(date) {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  copy.setDate(copy.getDate() - ((copy.getDay() + 6) % 7));
+  return copy;
+}
+
+function calendarRangeLabel(start, end) {
+  const startLabel = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const endLabel = end.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: start.getFullYear() === end.getFullYear() ? undefined : "numeric",
+  });
+  return `${startLabel} - ${endLabel}`;
+}
 
 const navItems = [
   { label: "Dashboard", meta: "All sports", icon: "home" },
@@ -4613,6 +4698,31 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    getLocalService("/display").then((payload) => {
+      if (cancelled) return;
+      const commands = Array.isArray(payload.powerCommands) ? payload.powerCommands.filter(Boolean).join(", ") : "";
+      setDisplayStatus({
+        state: payload.powerCommands?.length ? "idle" : "warning",
+        message: payload.powerCommands?.length
+          ? payload.mode === SCREEN_SLEEP_MODE
+            ? `Display control ready. ${payload.secondsUntilSleep ?? payload.timeoutSeconds}s until sleep.`
+            : "Display control ready. Screen is set to always on."
+          : "Display mode is saved, but no supported Pi display command was detected.",
+        output: commands ? `Available: ${commands}` : "",
+      });
+    }).catch((error) => {
+      if (cancelled) return;
+      setDisplayStatus({
+        state: "warning",
+        message: "Display control is available when Nash Track is running from main.py on the Pi.",
+        output: String(error.message || error),
+      });
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   function handleBackdrop(e) { if (e.target === e.currentTarget) onClose(); }
 
   function handleConnect() {
@@ -4694,6 +4804,24 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
 
   function handleHeadlineCycling(enabled) {
     onSave({ ...settings, headlineCycling: enabled });
+  }
+
+  async function handleDisplaySleepTest() {
+    setDisplayStatus({ state: "running", message: "Testing display sleep for 10 seconds...", output: "" });
+    try {
+      const payload = await postDisplayService("/display/test-sleep", {});
+      setDisplayStatus({
+        state: "success",
+        message: payload.message || "Display sleep test started.",
+        output: payload.command ? `Used ${payload.command}` : payload.output || "",
+      });
+    } catch (error) {
+      setDisplayStatus({
+        state: "error",
+        message: "Display sleep test failed on this Pi.",
+        output: String(error.message || error),
+      });
+    }
   }
 
   return (
@@ -4854,9 +4982,16 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
                 Sleep 3 min
               </button>
             </div>
+            <button
+              className="settings-update-btn settings-test-btn"
+              disabled={displayStatus.state === "running"}
+              onClick={handleDisplaySleepTest}
+            >
+              Test 10s
+            </button>
           </div>
           <p className="settings-display-note">
-            Sleep mode turns the Pi display off after 3 minutes without touch input; tap the screen to wake it.
+            Sleep mode turns the Pi display off after 3 minutes without touch input. Test mode wakes automatically after 10 seconds.
           </p>
           {displayStatus.message && (
             <div className={`settings-update-status ${displayStatus.state}`}>
@@ -4913,6 +5048,49 @@ const NAV_ROUTE_KEYS = new Set([...Object.values(NAV_VIEW), "favorites", "calend
 function viewFromHash(hash = window.location.hash) {
   const view = hash.replace(/^#/, "").toLowerCase();
   return NAV_ROUTE_KEYS.has(view) ? view : "dashboard";
+}
+
+function UpdatePrompt({ status, onUpdateNow, onLater, onSkip }) {
+  const update = status.update || {};
+  const isRunning = status.state === "running";
+  const isReady = status.state === "ready";
+  const isDone = status.state === "success" || status.state === "error";
+
+  return (
+    <div className="update-prompt" role="dialog" aria-modal="true" aria-label="NashTrack update available">
+      <div className="update-prompt-card">
+        <div className="update-prompt-icon">
+          <Icon name={status.state === "success" ? "checkCircle" : "refresh"} size={18} />
+        </div>
+        <div className="update-prompt-copy">
+          <strong>{status.message || "NashTrack update available"}</strong>
+          <span>
+            {update.remoteShort
+              ? `${update.remoteShort}${update.subject ? ` - ${update.subject}` : ""}`
+              : status.output || "The Pi can pull the latest GitHub version."}
+          </span>
+          {status.output && update.remoteShort && <pre>{status.output}</pre>}
+        </div>
+        <div className="update-prompt-actions">
+          {isReady && (
+            <>
+              <button className="update-action primary" disabled={isRunning} onClick={onUpdateNow}>
+                Update now
+              </button>
+              <button className="update-action" disabled={isRunning} onClick={onLater}>
+                Later
+              </button>
+              <button className="update-action subtle" disabled={isRunning} onClick={onSkip}>
+                Skip update
+              </button>
+            </>
+          )}
+          {isRunning && <button className="update-action primary" disabled>Updating...</button>}
+          {isDone && <button className="update-action primary" onClick={onLater}>Close</button>}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Sidebar({ lastUpdated, nextRefresh, onOpenSettings, activeView, onNavigate }) {
@@ -5002,109 +5180,122 @@ function Header({ weather }) {
 
 // ─── Side panels ─────────────────────────────────────────────────────────────
 
-function CalendarPanel({ googleEvents, connected, sportsGames }) {
+function CalendarPanel({ googleEvents = [], connected = false, sportsGames = [] }) {
   const today = new Date();
-  const [monthOffset, setMonthOffset] = useState(0);
-  const visibleMonth = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
-  const year = visibleMonth.getFullYear();
-  const month = visibleMonth.getMonth();
+  const todayKey = localDateKey(today);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const weekStart = addDays(startOfWeek(today), weekOffset * 7);
+  const weekEnd = addDays(weekStart, 13);
+  const rangeLabel = calendarRangeLabel(weekStart, weekEnd);
   const swipeHandlers = useSwipeControls({
-    onLeft: () => setMonthOffset((value) => value + 1),
-    onRight: () => setMonthOffset((value) => value - 1),
+    onLeft: () => setWeekOffset((value) => value + 1),
+    onRight: () => setWeekOffset((value) => value - 1),
   });
 
-  // Build Monday-first grid
-  const firstDay = new Date(year, month, 1);
-  const startDow = (firstDay.getDay() + 6) % 7; // Mon=0 … Sun=6
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells = [];
-  for (let i = 0; i < startDow; i++) {
-    cells.push({ day: new Date(year, month, 1 - startDow + i).getDate(), muted: true });
-  }
-  for (let d = 1; d <= daysInMonth; d++) {
-    cells.push({ day: d, muted: false });
-  }
-  let fill = 1;
-  while (cells.length % 7 !== 0) cells.push({ day: fill++, muted: true });
+  const baseDays = Array.from({ length: 14 }, (_, index) => {
+    const date = addDays(weekStart, index);
+    const key = localDateKey(date);
+    return { date, key, items: [] };
+  });
+  const itemsByDay = new Map(baseDays.map((day) => [day.key, []]));
 
-  // Map sports games → day → first tone color
-  const sportsDays = {};
-  sportsGames.forEach((g) => {
-    if (!g.date) return;
-    const d = new Date(g.date);
-    if (d.getFullYear() === year && d.getMonth() === month) {
-      if (!sportsDays[d.getDate()]) sportsDays[d.getDate()] = g.tone;
-    }
+  (sportsGames || []).forEach((game) => {
+    const date = toLocalDate(game?.date);
+    const key = localDateKey(date);
+    if (!date || !itemsByDay.has(key)) return;
+    const isF1 = game.leagueShort === "F1";
+    const label = isF1
+      ? (game.home || game.meetingName || "Session")
+      : [game.away, game.home].filter(Boolean).join("@");
+    itemsByDay.get(key).push({
+      type: "sport",
+      tone: game.tone || "orange",
+      meta: game.leagueShort || "Game",
+      label: label || gameDisplayName(game),
+      time: date.getTime(),
+    });
   });
 
-  // Google Calendar event days
-  const gcalDays = new Set();
-  googleEvents.forEach((ev) => {
-    const d = new Date(ev.start.dateTime || ev.start.date);
-    if (d.getFullYear() === year && d.getMonth() === month) gcalDays.add(d.getDate());
+  (googleEvents || []).forEach((event) => {
+    const startValue = event?.start?.dateTime || event?.start?.date;
+    const date = toLocalDate(startValue);
+    const key = localDateKey(date);
+    if (!date || !itemsByDay.has(key)) return;
+    itemsByDay.get(key).push({
+      type: "gcal",
+      tone: "gcal",
+      meta: "GCal",
+      label: event.summary || "Calendar",
+      time: date.getTime(),
+    });
   });
 
-  const todayNum = today.getFullYear() === year && today.getMonth() === month ? today.getDate() : -1;
-  const monthLabel = visibleMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-  const upcomingGcal = googleEvents
-    .filter((ev) => new Date(ev.start.dateTime || ev.start.date) >= today)
-    .slice(0, 4);
+  const days = baseDays.map((day) => ({
+    ...day,
+    items: (itemsByDay.get(day.key) || []).sort((a, b) => a.time - b.time),
+  }));
 
   return (
     <section className="panel side-card calendar-panel swipe-panel" {...swipeHandlers}>
-      <div className="side-title"><h2>Calendar</h2><span className="cal-month">{monthLabel}</span></div>
+      <div className="side-title calendar-title">
+        <div className="calendar-heading">
+          <h2>Calendar</h2>
+          <span className="cal-month">{rangeLabel}</span>
+        </div>
+        <button
+          className="calendar-now-btn"
+          disabled={weekOffset === 0}
+          type="button"
+          onClick={() => setWeekOffset(0)}
+        >
+          Now
+        </button>
+      </div>
       <div className="weekday-row">
         {["Mo","Tu","We","Th","Fr","Sa","Su"].map((d) => <span key={d}>{d}</span>)}
       </div>
-      <div className="calendar-grid">
-        {cells.map(({ day, muted }, i) => {
-          const isToday = !muted && day === todayNum;
-          const sportTone = !muted && sportsDays[day];
-          const hasGcal = !muted && gcalDays.has(day);
+      <div className="calendar-grid two-week">
+        {days.map(({ date, key, items }) => {
+          const isToday = key === todayKey;
+          const visibleItems = items.slice(0, 2);
+          const hiddenCount = Math.max(0, items.length - visibleItems.length);
           return (
-            <button className={`calendar-day${muted ? " muted" : ""}${isToday ? " selected" : ""}`} key={i}>
-              {day}
-              {(sportTone || hasGcal) && (
-                <span className="day-dots">
-                  {sportTone && <i className={`day-dot ${sportTone}`} />}
-                  {hasGcal && <i className="day-dot gcal" />}
-                </span>
-              )}
+            <button
+              aria-label={`${date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}: ${items.length || "no"} events`}
+              className={`calendar-day${isToday ? " selected" : ""}`}
+              key={key}
+              title={items.map((item) => `${item.meta}: ${item.label}`).join("\n")}
+              type="button"
+            >
+              <span className="calendar-date-row">
+                <b>{date.getDate()}</b>
+                <em>{date.toLocaleDateString("en-US", { month: "short" })}</em>
+              </span>
+              <span className="calendar-day-items">
+                {visibleItems.map((item, index) => (
+                  <span className={`calendar-day-chip ${item.tone}`} key={`${item.type}-${item.label}-${index}`}>
+                    <b>{item.meta}</b>
+                    <span>{item.label}</span>
+                  </span>
+                ))}
+                {hiddenCount > 0 && <span className="calendar-more">+{hiddenCount} more</span>}
+              </span>
             </button>
           );
         })}
       </div>
 
-      {/* Google Calendar upcoming events list */}
-      {connected && upcomingGcal.length > 0 && (
-        <div className="gcal-events">
-          {upcomingGcal.map((ev, i) => {
-            const d = new Date(ev.start.dateTime || ev.start.date);
-            const isAllDay = !ev.start.dateTime;
-            return (
-              <div className="gcal-event-row" key={i}>
-                <div className="gcal-event-dot" />
-                <div className="gcal-event-copy">
-                  <strong>{ev.summary || "(No title)"}</strong>
-                  <span>
-                    {isAllDay
-                      ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                      : d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+      <div className="calendar-footer">
+        <div className="legend">
+          <span className="pink">F1</span>
+          <span className="orange">NBA</span>
+          <span className="blue">Soccer</span>
+          <span className="green">NFL</span>
         </div>
-      )}
-
-      {/* Legend — always show so user knows what the sport dots mean */}
-      <div className="legend">
-        <span className="pink">F1</span>
-        <span className="orange">NBA</span>
-        <span className="blue">Soccer</span>
-        <span className="green">NFL</span>
-        {connected && <span style={{ color: "#58a6ff" }}>GCal</span>}
+        <span className={`gcal-status${connected ? " connected" : ""}`}>
+          <i />
+          Google Calendar {connected ? "Connected" : "Not connected"}
+        </span>
       </div>
     </section>
   );
@@ -5597,6 +5788,7 @@ function App() {
   const [settings,     setSettings]     = useState(loadNashSettings);
   const [googleToken,  setGoogleToken]  = useState(() => sessionStorage.getItem("gtoken") || null);
   const [calEvents,    setCalEvents]    = useState([]);
+  const [updatePrompt, setUpdatePrompt] = useState({ visible: false, state: "idle", message: "", output: "", update: null });
 
   useEffect(() => {
     function syncViewFromHash() {
@@ -5664,6 +5856,64 @@ function App() {
     localStorage.setItem(NASH_SETTINGS_KEY, JSON.stringify(next));
   }
 
+  async function checkForUpdatePrompt() {
+    try {
+      const payload = await checkForAppUpdate();
+      const skippedRevision = loadSkippedUpdateRevision();
+      if (payload.updateAvailable && payload.remoteRevision && payload.remoteRevision !== skippedRevision) {
+        setUpdatePrompt({
+          visible: true,
+          state: "ready",
+          message: payload.behind > 1 ? `${payload.behind} NashTrack updates available` : "NashTrack update available",
+          output: "",
+          update: payload,
+        });
+      }
+    } catch {
+      // The Pi updater may be unavailable during local browser-only development.
+    }
+  }
+
+  async function handlePromptUpdateNow() {
+    setUpdatePrompt((prev) => ({
+      ...prev,
+      visible: true,
+      state: "running",
+      message: "Updating NashTrack...",
+      output: "",
+    }));
+
+    try {
+      const payload = await runAppUpdate();
+      setUpdatePrompt((prev) => ({
+        ...prev,
+        visible: true,
+        state: "success",
+        message: payload.message || "Update complete. Restart NashTrack to load the new app.",
+        output: payload.output || "",
+      }));
+    } catch (error) {
+      setUpdatePrompt((prev) => ({
+        ...prev,
+        visible: true,
+        state: "error",
+        message: "Update failed.",
+        output: String(error.message || error),
+      }));
+    }
+  }
+
+  function handlePromptLater() {
+    setUpdatePrompt((prev) => ({ ...prev, visible: false }));
+  }
+
+  function handlePromptSkip() {
+    if (updatePrompt.update?.remoteRevision) {
+      saveSkippedUpdateRevision(updatePrompt.update.remoteRevision);
+    }
+    setUpdatePrompt((prev) => ({ ...prev, visible: false }));
+  }
+
   function navigateView(view) {
     setActiveView(view);
     const url = view === "dashboard"
@@ -5678,6 +5928,15 @@ function App() {
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    const firstCheck = window.setTimeout(checkForUpdatePrompt, 12_000);
+    const interval = window.setInterval(checkForUpdatePrompt, UPDATE_CHECK_INTERVAL_MS);
+    return () => {
+      window.clearTimeout(firstCheck);
+      window.clearInterval(interval);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useScreenSleepMode(settings.screenMode || DEFAULT_SCREEN_MODE);
 
   return (
@@ -5689,6 +5948,14 @@ function App() {
           onClose={() => setShowSettings(false)}
           onConnect={connectGoogle}
           onDisconnect={disconnectGoogle}
+        />
+      )}
+      {updatePrompt.visible && (
+        <UpdatePrompt
+          status={updatePrompt}
+          onUpdateNow={handlePromptUpdateNow}
+          onLater={handlePromptLater}
+          onSkip={handlePromptSkip}
         />
       )}
       <Sidebar
