@@ -112,7 +112,7 @@ Third pass added: redesigned full-game popup as a compact Game Center with match
   - `utils/` for dates, sports normalization, and broadcast/service mapping.
 - [ ] Add a local cache/proxy layer so the Pi serves normalized payloads from endpoints like `/api/dashboard`, `/api/football`, `/api/f1`, `/api/weather`, `/api/calendar`, and `/api/health`.
 - [ ] Store last-known-good dashboard data locally so API failures show stale-but-useful cards instead of blank panels.
-- [ ] Lock down the local Pi control service by removing wildcard CORS for update/display/startup endpoints and allowing only the NashTrack app origin.
+- [x] Lock down the local Pi control service by removing wildcard CORS for update/display/startup endpoints and allowing only the NashTrack app origin.
 - [ ] Add a launch-time local token or equivalent protection for privileged Pi controls such as update, startup, and display power.
 - [ ] Serve the production Vite build from Python for deployed Pi kiosk mode instead of relying on the Vite dev server forever.
 - [ ] Add `npm run lint`, `npm run test`, and `npm run build:pi` scripts.

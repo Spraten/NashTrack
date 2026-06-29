@@ -4740,12 +4740,11 @@ function SettingsModal({ settings, onSave, onClose, onConnect, onDisconnect }) {
   async function handleUpdate() {
     setUpdateStatus({ state: "running", message: "Checking GitHub for updates...", output: "" });
     try {
-      const response = await fetch("http://127.0.0.1:5183/update", { method: "POST" });
-      const payload = await response.json().catch(() => ({}));
+      const payload = await runAppUpdate();
       const changed = payload.ok && !/Already up to date/i.test(`${payload.message || ""}\n${payload.output || ""}`);
       setUpdateStatus({
-        state: payload.ok ? "success" : "error",
-        message: changed ? "Update installed. Reloading NashTrack..." : payload.message || (response.ok ? "Update complete." : "Update failed."),
+        state: "success",
+        message: changed ? "Update installed. Reloading NashTrack..." : payload.message || "Update complete.",
         output: payload.output || "",
       });
       if (changed) window.setTimeout(() => window.location.reload(), AUTO_UPDATE_RELOAD_DELAY_MS);

@@ -42,6 +42,30 @@ _display_sleeping = False
 _display_watchdog_thread: threading.Thread | None = None
 
 
+def _allowed_app_origins() -> set[str]:
+    origins = {
+        f"http://127.0.0.1:{PORT}",
+        f"http://localhost:{PORT}",
+    }
+    if HOST not in {"", "0.0.0.0", "::", "127.0.0.1", "localhost"}:
+        origins.add(f"http://{HOST}:{PORT}")
+
+    extra = os.environ.get("NASH_TRACK_ALLOWED_ORIGINS", "")
+    origins.update(origin.strip().rstrip("/") for origin in extra.split(",") if origin.strip())
+    return origins
+
+
+def _allowed_updater_hosts() -> set[str]:
+    hosts = {
+        f"127.0.0.1:{UPDATER_PORT}",
+        f"localhost:{UPDATER_PORT}",
+        f"[::1]:{UPDATER_PORT}",
+    }
+    extra = os.environ.get("NASH_TRACK_ALLOWED_UPDATER_HOSTS", "")
+    hosts.update(host.strip().lower() for host in extra.split(",") if host.strip())
+    return hosts
+
+
 def _creation_flags() -> int:
     if os.name == "nt":
         return getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -589,19 +613,51 @@ class _UpdaterHandler(BaseHTTPRequestHandler):
     def log_message(self, _format: str, *_args: object) -> None:
         return
 
+    def _origin(self) -> str:
+        return self.headers.get("Origin", "").strip().rstrip("/")
+
+    def _host(self) -> str:
+        return self.headers.get("Host", "").strip().lower()
+
+    def _request_allowed(self) -> bool:
+        host = self._host()
+        if host and host not in _allowed_updater_hosts():
+            self._send_json(403, {"ok": False, "message": "Forbidden local service host."})
+            return False
+
+        origin = self._origin()
+        if origin and origin not in _allowed_app_origins():
+            self._send_json(403, {"ok": False, "message": "Forbidden local service origin."})
+            return False
+
+        return True
+
+    def _send_cors_headers(self) -> None:
+        origin = self._origin()
+        if origin and origin in _allowed_app_origins():
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Max-Age", "600")
+
     def _send_json(self, status: int, payload: dict[str, object]) -> None:
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self._send_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
     def do_OPTIONS(self) -> None:
-        self._send_json(200, {"ok": True})
+        if not self._request_allowed():
+            return
+
+        self.send_response(204)
+        self._send_cors_headers()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _read_json_body(self) -> dict[str, object]:
         length = int(self.headers.get("Content-Length", "0") or 0)
@@ -615,6 +671,9 @@ class _UpdaterHandler(BaseHTTPRequestHandler):
         return json.loads(body.decode("utf-8"))
 
     def do_GET(self) -> None:
+        if not self._request_allowed():
+            return
+
         route = self.path.split("?", 1)[0]
         if route == "/health":
             self._send_json(200, {"ok": True, "service": "Nash Track updater"})
@@ -632,6 +691,9 @@ class _UpdaterHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"ok": False, "message": "Unknown updater route."})
 
     def do_POST(self) -> None:
+        if not self._request_allowed():
+            return
+
         route = self.path.split("?", 1)[0]
         try:
             if route == "/update":
